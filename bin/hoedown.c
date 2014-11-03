@@ -1,67 +1,93 @@
+#if __STDC_VERSION__ >= 199901L
+#define _XOPEN_SOURCE 600
+#else
+#define _XOPEN_SOURCE 500
+#endif /* __STDC_VERSION__ */
+
 #include "document.h"
 #include "html.h"
 
 #include "common.h"
-/*#include <time.h>*/
+#include "noop.h"
+
+#include <time.h>
 
 
 /* FEATURES INFO / DEFAULTS */
 
 enum renderer_type {
-	RENDERER_HTML,
-	RENDERER_HTML_TOC
+  RENDERER_HTML,
+  RENDERER_NOOP
 };
 
-struct extension_category_info {
-	unsigned int flags;
-	const char *option_name;
-	const char *label;
+struct preset_info {
+  hoedown_features flags;
+  const char *option_name;
+  const char *label;
+  const char *description;
 };
 
-struct extension_info {
-	unsigned int flag;
-	const char *option_name;
-	const char *description;
+struct feature_category_info {
+  hoedown_features flags;
+  const char *option_name;
+  const char *label;
 };
 
-struct html_flag_info {
-	unsigned int flag;
-	const char *option_name;
-	const char *description;
+struct feature_info {
+  hoedown_features flag;
+  const char *option_name;
+  const char *description;
 };
 
-static struct extension_category_info categories_info[] = {
-	{HOEDOWN_EXT_BLOCK, "block", "Block extensions"},
-	{HOEDOWN_EXT_SPAN, "span", "Span extensions"},
-	{HOEDOWN_EXT_FLAGS, "flags", "Other flags"},
-	{HOEDOWN_EXT_NEGATIVE, "negative", "Negative flags"},
+static struct preset_info presets_info[] = {
+  {HOEDOWN_FT_COMMONMARK, "stmd", "CommonMark", "Parse standard CommonMark. The default."},
+  {HOEDOWN_FT_MARKDOWN, "markdown", "Markdown", "Parse classic Markdown."},
+  {0, "none", "None", "Start with all flags disabled."},
 };
 
-static struct extension_info extensions_info[] = {
-	{HOEDOWN_EXT_TABLES, "tables", "Parse PHP-Markdown style tables."},
-	{HOEDOWN_EXT_FENCED_CODE, "fenced-code", "Parse fenced code blocks."},
-	{HOEDOWN_EXT_FOOTNOTES, "footnotes", "Parse footnotes."},
-
-	{HOEDOWN_EXT_AUTOLINK, "autolink", "Automatically turn safe URLs into links."},
-	{HOEDOWN_EXT_STRIKETHROUGH, "strikethrough", "Parse ~~stikethrough~~ spans."},
-	{HOEDOWN_EXT_UNDERLINE, "underline", "Parse _underline_ instead of emphasis."},
-	{HOEDOWN_EXT_HIGHLIGHT, "highlight", "Parse ==highlight== spans."},
-	{HOEDOWN_EXT_QUOTE, "quote", "Render \"quotes\" as <q>quotes</q>."},
-	{HOEDOWN_EXT_SUPERSCRIPT, "superscript", "Parse super^script."},
-	{HOEDOWN_EXT_MATH, "math", "Parse TeX $$math$$ syntax, Kramdown style."},
-
-	{HOEDOWN_EXT_NO_INTRA_EMPHASIS, "disable-intra-emphasis", "Disable emphasis_between_words."},
-	{HOEDOWN_EXT_SPACE_HEADERS, "space-headers", "Require a space after '#' in headers."},
-	{HOEDOWN_EXT_MATH_EXPLICIT, "math-explicit", "Instead of guessing by context, parse $inline math$ and $$always block math$$ (requires --math)."},
-
-	{HOEDOWN_EXT_DISABLE_INDENTED_CODE, "disable-indented-code", "Don't parse indented code blocks."},
+static struct feature_category_info categories_info[] = {
+  {HOEDOWN_FT_BLOCK, "block", "Block construct features"},
+  {HOEDOWN_FT_INLINE, "inline", "Inline construct features"},
+  {HOEDOWN_FT_OTHER, "other", "Other features"},
+  {HOEDOWN_FT_FLAGS, "flags", "Feature flags"},
 };
 
-static struct html_flag_info html_flags_info[] = {
-	{HOEDOWN_HTML_SKIP_HTML, "skip-html", "Strip all HTML tags."},
-	{HOEDOWN_HTML_ESCAPE, "escape", "Escape all HTML."},
-	{HOEDOWN_HTML_HARD_WRAP, "hard-wrap", "Render each linebreak as <br>."},
-	{HOEDOWN_HTML_USE_XHTML, "xhtml", "Render XHTML."},
+static struct feature_info features_info[] = {
+  {HOEDOWN_FT_DIRECTIVE, "directive", "Parse generic directive syntax."},
+  {HOEDOWN_FT_INDENTED_CODE_BLOCK, "indented-code-block", "Parse indented code blocks."},
+  {HOEDOWN_FT_FENCED_CODE_BLOCK, "fenced-code-block", "Parse fenced code blocks."},
+  {HOEDOWN_FT_HORIZONTAL_RULE, "horizontal-rule", "Parse horizontal rules."},
+  {HOEDOWN_FT_ATX_HEADER, "atx-header", "Parse ATX headers."},
+  {HOEDOWN_FT_SETEXT_HEADER, "setext-header", "Parse Setext headers"},
+  {HOEDOWN_FT_LIST, "list", "Parse bullet and numbered lists."},
+  {HOEDOWN_FT_QUOTE_BLOCK, "quote-block", "Parse email-style quote blocks."},
+  {HOEDOWN_FT_HTML_BLOCK, "html-block", "Parse raw HTML blocks."},
+  {HOEDOWN_FT_TABLE, "table", "Parse Kramdown style tables."},
+
+  {HOEDOWN_FT_ROLE, "role", "Parse generic role syntax."},
+  {HOEDOWN_FT_ESCAPE, "escape", "Parse backslash escapes."},
+  {HOEDOWN_FT_HARD_LINEBREAK, "hard-linebreak", "Parse backslash linebreaks."},
+  {HOEDOWN_FT_LINEBREAK, "linebreak", "Parse two-space linebreaks."},
+  {HOEDOWN_FT_SOFT_LINEBREAK, "soft-linebreak", "Parse newlines as linebreaks."},
+  {HOEDOWN_FT_URI_AUTOLINK, "uri-autolink", "Parse URI autolinks between angle brackets."},
+  {HOEDOWN_FT_EMAIL_AUTOLINK, "email-autolink", "Parse email autolinks between angle brackets."},
+  {HOEDOWN_FT_HTML, "html", "Parse inline HTML."},
+  {HOEDOWN_FT_ENTITY, "entity", "Parse HTML entities."},
+  {HOEDOWN_FT_CODE_SPAN, "code-span", "Parse code spans between backticks."},
+  {HOEDOWN_FT_EMPHASIS, "emphasis", "Parse emphasis and strong emphasis."},
+  {HOEDOWN_FT_LINK, "link", "Parse links and link references."},
+  {HOEDOWN_FT_MATH, "math", "Parse Kramdown-style math spans."},
+  {HOEDOWN_FT_SUPERSCRIPT, "superscript", "Parse superscript spans."},
+  {HOEDOWN_FT_QUOTE, "quote", "Parse quote-delimited spans."},
+  {HOEDOWN_FT_STRIKETHROUGH, "strikethrough", "Parse strikethrough spans."},
+  {HOEDOWN_FT_HIGHLIGHT, "highlight", "Parse highlight spans."},
+  {HOEDOWN_FT_FOOTNOTE, "footnote", "Parse footnotes and footnote references."},
+
+  {HOEDOWN_FT_PREPROCESS, "preprocess", "Preprocess the input. Hoedown can give bad results if input is not preprocessed."},
+
+  {HOEDOWN_FT_LINK_IMAGE, "link-image", "Allow links preceded by a bang to be rendered as images."},
+  {HOEDOWN_FT_INTRA_EMPHASIS, "intra-emphasis", "Requires --emphasis. Allow underscores between words to be parsed as emphasis."},
+  {HOEDOWN_FT_MATH_EXPLICIT, "math-explicit", "Requires --math. Enables parsing $...$ as inline math and restricts $$...$$ to block math."},
 };
 
 static const char *category_prefix = "all-";
@@ -74,386 +100,383 @@ static const char *negative_prefix = "no-";
 
 /* PRINT HELP */
 
-void
-print_help(const char *basename)
-{
-	size_t i;
-	size_t e;
+static void print_feature_option(struct feature_info *feature) {
+  size_t i;
 
-	/* usage */
-	printf("Usage: %s [OPTION]... [FILE]\n\n", basename);
+  /* prepare the description */
+  char *desc = malloc(strlen(feature->description)+40);
+  memcpy(desc, feature->description, strlen(feature->description)+1);
 
-	/* description */
-	printf("Process the Markdown in FILE (or standard input) and render it to standard output, using the Hoedown library. "
-	       "Parsing and rendering can be customized through the options below. The default is to parse pure markdown and output HTML.\n\n");
+  /* add tags to the description */
+  for (i = 0; i < count_of(presets_info); i++)
+    if (feature->flag & presets_info[i].flags) {
+      strcat(desc, " [");
+      strcat(desc, presets_info[i].label);
+      strcat(desc, "]");
+    }
 
-	/* main options */
-	printf("Main options:\n");
-	print_option('n', "max-nesting=N", "Maximum level of block nesting parsed. Default is " str(DEF_MAX_NESTING) ".");
-	print_option('t', "toc-level=N", "Maximum level for headers included in the TOC. Zero disables TOC (the default).");
-	print_option(  0, "html", "Render (X)HTML. The default.");
-	print_option(  0, "html-toc", "Render the Table of Contents in (X)HTML.");
-	print_option('T', "time", "Show time spent in rendering.");
-	print_option('i', "input-unit=N", "Reading block size. Default is " str(DEF_IUNIT) ".");
-	print_option('o', "output-unit=N", "Writing block size. Default is " str(DEF_OUNIT) ".");
-	print_option('h', "help", "Print this help text.");
-	print_option('v', "version", "Print Hoedown version.");
-	printf("\n");
+  /* print feature option */
+  print_option(  0, feature->option_name, desc);
+}
 
-	/* extensions */
-	for (i = 0; i < count_of(categories_info); i++) {
-		struct extension_category_info *category = categories_info+i;
-		printf("%s (--%s%s):\n", category->label, category_prefix, category->option_name);
-		for (e = 0; e < count_of(extensions_info); e++) {
-			struct extension_info *extension = extensions_info+e;
-			if (extension->flag & category->flags) {
-				print_option(  0, extension->option_name, extension->description);
-			}
-		}
-		printf("\n");
-	}
+static void print_help(const char *basename) {
+  size_t i, e;
 
-	/* html-specific */
-	printf("HTML-specific options:\n");
-	for (i = 0; i < count_of(html_flags_info); i++) {
-		struct html_flag_info *html_flag = html_flags_info+i;
-		print_option(  0, html_flag->option_name, html_flag->description);
-	}
-	printf("\n");
+  /* usage */
+  printf("Usage: %s [OPTION]... [FILE]\n\n", basename);
 
-	/* ending */
-	printf("Flags and extensions can be negated by prepending 'no' to them, as in '--no-tables', '--no-span' or '--no-escape'. "
-	       "Options are processed in order, so in case of contradictory options the last specified stands.\n\n");
+  /* description */
+  printf("Process the Markdown in FILE (or standard input) and render it to standard output, using the Hoedown library. "
+         "Parsing and rendering can be customized through the options below. The default is to parse pure CommonMark and output HTML.\n\n");
 
-	printf("When FILE is '-', read standard input. If no FILE was given, read standard input. Use '--' to signal end of option parsing. "
-	       "Exit status is 0 if no errors occurred, 1 with option parsing errors, 4 with memory allocation errors or 5 with I/O errors.\n\n");
+  /* main options */
+  printf("Main options:\n");
+  print_option('n', "max-nesting=N", "Maximum level of block nesting parsed. Default is " str(DEF_MAX_NESTING) ".");
+  print_option(  0, "html", "Render (X)HTML. The default.");
+  print_option(  0, "noop", "Use a special renderer whose callbacks do nothing.");
+  print_option('T', "time", "Show time spent in rendering.");
+  print_option('i', "input-unit=N", "Reading block size. Default is " str(DEF_IUNIT) ".");
+  print_option('o', "output-unit=N", "Writing block size. Default is " str(DEF_OUNIT) ".");
+  print_option(  0, "block", "Parse block-level Markdown. The default.");
+  print_option(  0, "inline", "Parse inline-level Markdown.");
+  print_option('h', "help", "Print this help text.");
+  print_option('v', "version", "Print Hoedown version.");
+  printf("\n");
+
+  /* base presets */
+  printf("Base presets:\n");
+  for (i = 0; i < count_of(presets_info); i++) {
+    struct preset_info *preset = &presets_info[i];
+    print_option(  0, preset->option_name, preset->description);
+  }
+  printf("\n");
+
+  /* features */
+  for (i = 0; i < count_of(categories_info); i++) {
+    struct feature_category_info *category = &categories_info[i];
+    printf("%s (--%s%s):\n", category->label, category_prefix, category->option_name);
+    for (e = 0; e < count_of(features_info); e++) {
+      struct feature_info *feature = &features_info[e];
+      if (feature->flag & category->flags)
+        print_feature_option(feature);
+    }
+    printf("\n");
+  }
+
+  /* ending */
+  printf("Feature flags can be negated by prepending 'no' to them, as in '--no-table', '--no-flags' or '--no-escape'. "
+         "Base presets override any flag given previously. Options are processed in order, so in case of contradictory options the last specified stands.\n\n");
+
+  printf("When FILE is '-', read standard input. If no FILE was given, read standard input. Use '--' to signal end of option parsing. "
+         "Exit status is 0 if no errors occured, 1 with option parsing errors, 4 with memory allocation errors or 5 with I/O errors.\n\n");
 }
 
 
 /* OPTION PARSING */
 
 struct option_data {
-	char *basename;
-	int done;
+  char *basename;
+  int done;
 
-	/* time reporting */
-	int show_time;
+  /* time reporting */
+  int show_time;
 
-	/* I/O */
-	size_t iunit;
-	size_t ounit;
-	const char *filename;
+  /* I/O */
+  size_t iunit;
+  size_t ounit;
+  const char *filename;
 
-	/* renderer */
-	enum renderer_type renderer;
-	int toc_level;
-	hoedown_html_flags html_flags;
+  /* renderer */
+  enum renderer_type renderer;
 
-	/* parsing */
-	hoedown_extensions extensions;
-	size_t max_nesting;
+  /* parsing */
+  int is_inline;
+  hoedown_features features;
+  size_t max_nesting;
 };
 
-int
-parse_short_option(char opt, char *next, void *opaque)
-{
-	struct option_data *data = opaque;
-	long int num;
-	int isNum = next ? parseint(next, &num) : 0;
+static int parse_short_option(char opt, char *next, void *opaque) {
+  struct option_data *data = opaque;
+  long int num;
+  int isNum = next ? parseint(next, &num) : 0;
 
-	if (opt == 'h') {
-		print_help(data->basename);
-		data->done = 1;
-		return 0;
-	}
+  if (opt == 'h') {
+    print_help(data->basename);
+    data->done = 1;
+    return 0;
+  }
 
-	if (opt == 'v') {
-		print_version();
-		data->done = 1;
-		return 0;
-	}
+  if (opt == 'v') {
+    print_version();
+    data->done = 1;
+    return 0;
+  }
 
-	if (opt == 'T') {
-		data->show_time = 1;
-		return 1;
-	}
+  if (opt == 'T') {
+    data->show_time = 1;
+    return 1;
+  }
 
-	/* options requiring value */
-	/* FIXME: add validation */
+  /* options requiring value */
+  /* FIXME: add validation */
 
-	if (opt == 'n' && isNum) {
-		data->max_nesting = num;
-		return 2;
-	}
+  if (opt == 'n' && isNum) {
+    data->max_nesting = num;
+    return 2;
+  }
 
-	if (opt == 't' && isNum) {
-		data->toc_level = num;
-		return 2;
-	}
+  if (opt == 'i' && isNum) {
+    data->iunit = num;
+    return 2;
+  }
 
-	if (opt == 'i' && isNum) {
-		data->iunit = num;
-		return 2;
-	}
+  if (opt == 'o' && isNum) {
+    data->ounit = num;
+    return 2;
+  }
 
-	if (opt == 'o' && isNum) {
-		data->ounit = num;
-		return 2;
-	}
-
-	fprintf(stderr, "Wrong option '-%c' found.\n", opt);
-	return 0;
+  fprintf(stderr, "Wrong option '-%c' found.\n", opt);
+  return 0;
 }
 
-int
-parse_category_option(char *opt, struct option_data *data)
-{
-	size_t i;
-	const char *name = strprefix(opt, category_prefix);
-	if (!name) return 0;
+static int parse_preset_option(char *opt, struct option_data *data) {
+  size_t i;
 
-	for (i = 0; i < count_of(categories_info); i++) {
-		struct extension_category_info *category = &categories_info[i];
-		if (strcmp(name, category->option_name)==0) {
-			data->extensions |= category->flags;
-			return 1;
-		}
-	}
+  for (i = 0; i < count_of(presets_info); i++) {
+    struct preset_info *preset = &presets_info[i];
+    if (strcmp(opt, preset->option_name)==0) {
+      data->features = preset->flags;
+      return 1;
+    }
+  }
 
-	return 0;
+  return 0;
 }
 
-int
-parse_flag_option(char *opt, struct option_data *data)
-{
-	size_t i;
+static int parse_category_option(char *opt, struct option_data *data) {
+  size_t i;
+  const char *name = strprefix(opt, category_prefix);
+  if (!name) return 0;
 
-	for (i = 0; i < count_of(extensions_info); i++) {
-		struct extension_info *extension = &extensions_info[i];
-		if (strcmp(opt, extension->option_name)==0) {
-			data->extensions |= extension->flag;
-			return 1;
-		}
-	}
+  for (i = 0; i < count_of(categories_info); i++) {
+    struct feature_category_info *category = &categories_info[i];
+    if (strcmp(name, category->option_name)==0) {
+      data->features |= category->flags;
+      return 1;
+    }
+  }
 
-	for (i = 0; i < count_of(html_flags_info); i++) {
-		struct html_flag_info *html_flag = &html_flags_info[i];
-		if (strcmp(opt, html_flag->option_name)==0) {
-			data->html_flags |= html_flag->flag;
-			return 1;
-		}
-	}
-
-	return 0;
+  return 0;
 }
 
-int
-parse_negative_option(char *opt, struct option_data *data)
-{
-	size_t i;
-	const char *name = strprefix(opt, negative_prefix);
-	if (!name) return 0;
+static int parse_flag_option(char *opt, struct option_data *data) {
+  size_t i;
 
-	for (i = 0; i < count_of(categories_info); i++) {
-		struct extension_category_info *category = &categories_info[i];
-		if (strcmp(name, category->option_name)==0) {
-			data->extensions &= ~(category->flags);
-			return 1;
-		}
-	}
+  for (i = 0; i < count_of(features_info); i++) {
+    struct feature_info *feature = &features_info[i];
+    if (strcmp(opt, feature->option_name)==0) {
+      data->features |= feature->flag;
+      return 1;
+    }
+  }
 
-	for (i = 0; i < count_of(extensions_info); i++) {
-		struct extension_info *extension = &extensions_info[i];
-		if (strcmp(name, extension->option_name)==0) {
-			data->extensions &= ~(extension->flag);
-			return 1;
-		}
-	}
-
-	for (i = 0; i < count_of(html_flags_info); i++) {
-		struct html_flag_info *html_flag = &html_flags_info[i];
-		if (strcmp(name, html_flag->option_name)==0) {
-			data->html_flags &= ~(html_flag->flag);
-			return 1;
-		}
-	}
-
-	return 0;
+  return 0;
 }
 
-int
-parse_long_option(char *opt, char *next, void *opaque)
-{
-	struct option_data *data = opaque;
-	long int num;
-	int isNum = next ? parseint(next, &num) : 0;
+static int parse_negative_option(char *opt, struct option_data *data) {
+  size_t i;
+  const char *name = strprefix(opt, negative_prefix);
+  if (!name) return 0;
 
-	if (strcmp(opt, "help")==0) {
-		print_help(data->basename);
-		data->done = 1;
-		return 0;
-	}
+  for (i = 0; i < count_of(categories_info); i++) {
+    struct feature_category_info *category = &categories_info[i];
+    if (strcmp(name, category->option_name)==0) {
+      data->features &= ~(category->flags);
+      return 1;
+    }
+  }
 
-	if (strcmp(opt, "version")==0) {
-		print_version();
-		data->done = 1;
-		return 0;
-	}
+  for (i = 0; i < count_of(features_info); i++) {
+    struct feature_info *feature = &features_info[i];
+    if (strcmp(name, feature->option_name)==0) {
+      data->features &= ~(feature->flag);
+      return 1;
+    }
+  }
 
-	if (strcmp(opt, "time")==0) {
-		data->show_time = 1;
-		return 1;
-	}
-
-	/* FIXME: validation */
-
-	if (strcmp(opt, "max-nesting")==0 && isNum) {
-		data->max_nesting = num;
-		return 2;
-	}
-	if (strcmp(opt, "toc-level")==0 && isNum) {
-		data->toc_level = num;
-		return 2;
-	}
-	if (strcmp(opt, "input-unit")==0 && isNum) {
-		data->iunit = num;
-		return 2;
-	}
-	if (strcmp(opt, "output-unit")==0 && isNum) {
-		data->ounit = num;
-		return 2;
-	}
-
-	if (strcmp(opt, "html")==0) {
-		data->renderer = RENDERER_HTML;
-		return 1;
-	}
-	if (strcmp(opt, "html-toc")==0) {
-		data->renderer = RENDERER_HTML_TOC;
-		return 1;
-	}
-
-	if (parse_category_option(opt, data) || parse_flag_option(opt, data) || parse_negative_option(opt, data))
-		return 1;
-
-	fprintf(stderr, "Wrong option '--%s' found.\n", opt);
-	return 0;
+  return 0;
 }
 
-int
-parse_argument(int argn, char *arg, int is_forced, void *opaque)
-{
-	struct option_data *data = opaque;
+static int parse_long_option(char *opt, char *next, void *opaque) {
+  struct option_data *data = opaque;
+  long int num;
+  int isNum = next ? parseint(next, &num) : 0;
 
-	if (argn == 0) {
-		/* Input file */
-		if (strcmp(arg, "-")!=0 || is_forced) data->filename = arg;
-		return 1;
-	}
+  if (strcmp(opt, "help")==0) {
+    print_help(data->basename);
+    data->done = 1;
+    return 0;
+  }
 
-	fprintf(stderr, "Too many arguments.\n");
-	return 0;
+  if (strcmp(opt, "version")==0) {
+    print_version();
+    data->done = 1;
+    return 0;
+  }
+
+  if (strcmp(opt, "time")==0) {
+    data->show_time = 1;
+    return 1;
+  }
+
+  if (strcmp(opt, "block")==0) {
+    data->is_inline = 0;
+    return 1;
+  }
+
+  if (strcmp(opt, "inline")==0) {
+    data->is_inline = 1;
+    return 1;
+  }
+
+  /* FIXME: validation */
+
+  if (strcmp(opt, "max-nesting")==0 && isNum) {
+    data->max_nesting = num;
+    return 2;
+  }
+  if (strcmp(opt, "input-unit")==0 && isNum) {
+    data->iunit = num;
+    return 2;
+  }
+  if (strcmp(opt, "output-unit")==0 && isNum) {
+    data->ounit = num;
+    return 2;
+  }
+
+  if (strcmp(opt, "html")==0) {
+    data->renderer = RENDERER_HTML;
+    return 1;
+  }
+  if (strcmp(opt, "noop")==0) {
+    data->renderer = RENDERER_NOOP;
+    return 1;
+  }
+
+  if (parse_preset_option(opt, data) || parse_category_option(opt, data) || parse_flag_option(opt, data) || parse_negative_option(opt, data))
+    return 1;
+
+  fprintf(stderr, "Wrong option '--%s' found.\n", opt);
+  return 0;
+}
+
+static int parse_argument(int argn, char *arg, int is_forced, void *opaque) {
+  struct option_data *data = opaque;
+
+  if (argn == 0) {
+    /* Input file */
+    if (strcmp(arg, "-")!=0 || is_forced) data->filename = arg;
+    return 1;
+  }
+
+  fprintf(stderr, "Too many arguments.\n");
+  return 0;
 }
 
 
 /* MAIN LOGIC */
 
-int
-main(int argc, char **argv)
-{
-	struct option_data data;
-	/*struct timespec start, end;*/
-	FILE *file = stdin;
-	hoedown_buffer *ib, *ob;
-	hoedown_renderer *renderer = NULL;
-	void (*renderer_free)(hoedown_renderer *) = NULL;
-	hoedown_document *document;
+int main(int argc, char **argv) {
+  struct option_data data;
+  struct timespec start, end;
+  FILE *file = stdin;
+  hoedown_buffer *ib, *ob;
+  hoedown_renderer *renderer = NULL;
+  void (*renderer_free)(hoedown_renderer *) = NULL;
+  hoedown_document *document;
 
-	/* Parse options */
-	data.basename = argv[0];
-	data.done = 0;
-	data.show_time = 0;
-	data.iunit = DEF_IUNIT;
-	data.ounit = DEF_OUNIT;
-	data.filename = NULL;
-	data.renderer = RENDERER_HTML;
-	data.toc_level = 0;
-	data.html_flags = 0;
-	data.extensions = 0;
-	data.max_nesting = DEF_MAX_NESTING;
+  /* Parse options */
+  data.basename = argv[0];
+  data.done = 0;
+  data.show_time = 0;
+  data.iunit = DEF_IUNIT;
+  data.ounit = DEF_OUNIT;
+  data.filename = NULL;
+  data.renderer = RENDERER_HTML;
+  data.is_inline = 0;
+  data.max_nesting = DEF_MAX_NESTING;
+  data.features = presets_info[0].flags;
 
-	argc = parse_options(argc, argv, parse_short_option, parse_long_option, parse_argument, &data);
-	if (data.done) return 0;
-	if (!argc) return 1;
+  argc = parse_options(argc, argv, parse_short_option, parse_long_option, parse_argument, &data);
+  if (data.done) return 0;
+  if (!argc) return 1;
 
-	/* Open input file, if needed */
-	if (data.filename) {
-		file = fopen(data.filename, "r");
-		if (!file) {
-			fprintf(stderr, "Unable to open input file \"%s\": %s\n", data.filename, strerror(errno));
-			return 5;
-		}
-	}
+  /* Open input file, if needed */
+  if (data.filename) {
+    file = fopen(data.filename, "r");
+    if (!file) {
+      fprintf(stderr, "Unable to open input file \"%s\": %s\n", data.filename, strerror(errno));
+      return 5;
+    }
+  }
 
-	/* Read everything */
-	ib = hoedown_buffer_new(data.iunit);
+  /* Read everything */
+  ib = hoedown_buffer_new(data.iunit);
 
-	while (!feof(file)) {
-		if (ferror(file)) {
-			fprintf(stderr, "I/O errors found while reading input.\n");
-			return 5;
-		}
-		hoedown_buffer_grow(ib, ib->size + data.iunit);
-		ib->size += fread(ib->data + ib->size, 1, data.iunit, file);
-	}
+  while (!feof(file)) {
+    if (ferror(file)) {
+      fprintf(stderr, "I/O errors found while reading input.\n");
+      return 5;
+    }
+    hoedown_buffer_grow(ib, ib->size + data.iunit);
+    ib->size += fread(ib->data + ib->size, 1, data.iunit, file);
+  }
 
-	if (file != stdin) fclose(file);
+  if (file != stdin) fclose(file);
 
-	/* Create the renderer */
-	switch (data.renderer) {
-		case RENDERER_HTML:
-			renderer = hoedown_html_renderer_new(data.html_flags, data.toc_level);
-			renderer_free = hoedown_html_renderer_free;
-			break;
-		case RENDERER_HTML_TOC:
-			renderer = hoedown_html_toc_renderer_new(data.toc_level);
-			renderer_free = hoedown_html_renderer_free;
-			break;
-	};
+  /* Create the renderer */
+  switch (data.renderer) {
+    case RENDERER_HTML:
+      renderer = hoedown_html_renderer_new();
+      renderer_free = hoedown_html_renderer_free;
+      break;
+    case RENDERER_NOOP:
+      renderer = hoedown_noop_renderer_new();
+      renderer_free = hoedown_noop_renderer_free;
+      break;
+  };
 
-	/* Perform Markdown rendering */
-	ob = hoedown_buffer_new(data.ounit);
-	document = hoedown_document_new(renderer, data.extensions, data.max_nesting);
+  /* Perform Markdown rendering */
+  ob = hoedown_buffer_new(data.ounit);
+  document = hoedown_document_new(renderer, data.features, data.max_nesting);
 
-	/*clock_gettime(CLOCK_MONOTONIC, &start);*/
-	hoedown_document_render(document, ob, ib->data, ib->size);
-	/*clock_gettime(CLOCK_MONOTONIC, &end);*/
+  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
+  hoedown_document_render(document, ob, ib->data, ib->size, data.is_inline);
+  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
 
-	/* Write the result to stdout */
-	(void)fwrite(ob->data, 1, ob->size, stdout);
+  /* Write the result to stdout */
+  (void)fwrite(ob->data, 1, ob->size, stdout);
 
-	/* Show rendering time */
-	if (data.show_time) {
-		/*TODO: enable this
-		long long elapsed = (end.tv_sec - start.tv_sec)*1e9 + (end.tv_nsec - start.tv_nsec);
-		if (elapsed < 1e9)
-			fprintf(stderr, "Time spent on rendering: %.2f ms.\n", ((double)elapsed)/1e6);
-		else
-			fprintf(stderr, "Time spent on rendering: %.3f s.\n", ((double)elapsed)/1e9);
-		*/
-	}
+  /* Show rendering time */
+  if (data.show_time) {
+    long long elapsed = (end.tv_sec - start.tv_sec)*1e9 + (end.tv_nsec - start.tv_nsec);
+    if (elapsed < 1e9)
+      fprintf(stderr, "Time spent on rendering: %.2f ms.\n", ((double)elapsed)/1e6);
+    else
+      fprintf(stderr, "Time spent on rendering: %.3f s.\n", ((double)elapsed)/1e9);
+  }
 
-	/* Cleanup */
-	hoedown_buffer_free(ib);
-	hoedown_buffer_free(ob);
+  /* Cleanup */
+  hoedown_buffer_free(ib);
+  hoedown_buffer_free(ob);
 
-	hoedown_document_free(document);
-	renderer_free(renderer);
+  hoedown_document_free(document);
+  renderer_free(renderer);
 
-	if (ferror(stdout)) {
-		fprintf(stderr, "I/O errors found while writing output.\n");
-		return 5;
-	}
+  if (ferror(stdout)) {
+    fprintf(stderr, "I/O errors found while writing output.\n");
+    return 5;
+  }
 
-	return 0;
+  return 0;
 }

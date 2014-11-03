@@ -1,5 +1,5 @@
-/* ANSI-C code produced by gperf version 3.0.3 */
-/* Command-line: gperf -L ANSI-C -N hoedown_find_block_tag -c -C -E -S 1 --ignore-case -m100 html_block_names.gperf  */
+/* ANSI-C code produced by gperf version 3.0.4 */
+/* Command-line: gperf -L ANSI-C -N hoedown_find_block_tag -7 -c -C -E -S 1 --ignore-case -m100 data/html_blocks.gperf  */
 /* Computed positions: -k'1-2' */
 
 #if !((' ' == 32) && ('!' == 33) && ('"' == 34) && ('#' == 35) \
@@ -29,7 +29,7 @@
 #error "gperf generated tables don't work with this execution character set. Please report a bug to <bug-gnu-gperf@gnu.org>."
 #endif
 
-/* maximum key range = 24, duplicates = 0 */
+/* maximum key range = 52, duplicates = 0 */
 
 #ifndef GPERF_DOWNCASE
 #define GPERF_DOWNCASE 1
@@ -88,34 +88,21 @@ hash (register const char *str, register unsigned int len)
 {
   static const unsigned char asso_values[] =
     {
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      22, 21, 19, 18, 16,  0, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25,  1, 25,  0, 25,
-       1,  0,  0, 13,  0, 25, 25, 11,  2,  1,
-       0, 25, 25,  5,  0,  2, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25,  1, 25,
-       0, 25,  1,  0,  0, 13,  0, 25, 25, 11,
-       2,  1,  0, 25, 25,  5,  0,  2, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25, 25, 25, 25,
-      25, 25, 25, 25, 25, 25, 25
+      53, 53, 53, 53, 53, 53, 53, 53, 53, 53,
+      53, 53, 53, 53, 53, 53, 53, 53, 53, 53,
+      53, 53, 53, 53, 53, 53, 53, 53, 53, 53,
+      53, 53, 53, 53, 53, 53, 53, 53, 53, 53,
+      53, 53, 53, 53, 53, 53, 53, 53, 53, 53,
+      25, 24, 21, 20, 19, 18, 53, 53, 53, 53,
+      53, 53, 53, 53, 53, 26,  8,  2, 20, 30,
+       0, 22, 22, 23, 13, 53, 26,  0,  5, 29,
+       0, 53, 53,  0,  7, 25, 11, 53, 53, 53,
+      53, 53, 53, 53, 53, 53, 53, 26,  8,  2,
+      20, 30,  0, 22, 22, 23, 13, 53, 26,  0,
+       5, 29,  0, 53, 53,  0,  7, 25, 11, 53,
+      53, 53, 53, 53, 53, 53, 53, 53, 53
     };
-  register int hval = (int)len;
+  register int hval = len;
 
   switch (hval)
     {
@@ -131,7 +118,7 @@ hash (register const char *str, register unsigned int len)
 
 #ifdef __GNUC__
 __inline
-#ifdef __GNUC_STDC_INLINE__
+#if defined __GNUC_STDC_INLINE__ || defined __GNUC_GNU_INLINE__
 __attribute__ ((__gnu_inline__))
 #endif
 #endif
@@ -140,11 +127,11 @@ hoedown_find_block_tag (register const char *str, register unsigned int len)
 {
   enum
     {
-      TOTAL_KEYWORDS = 24,
+      TOTAL_KEYWORDS = 50,
       MIN_WORD_LENGTH = 1,
       MAX_WORD_LENGTH = 10,
       MIN_HASH_VALUE = 1,
-      MAX_HASH_VALUE = 24
+      MAX_HASH_VALUE = 52
     };
 
   if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)
@@ -160,74 +147,152 @@ hoedown_find_block_tag (register const char *str, register unsigned int len)
               case 0:
                 resword = "p";
                 goto compare;
-              case 1:
-                resword = "h6";
-                goto compare;
               case 2:
-                resword = "div";
-                goto compare;
-              case 3:
-                resword = "del";
-                goto compare;
-              case 4:
-                resword = "form";
-                goto compare;
-              case 5:
-                resword = "table";
-                goto compare;
-              case 6:
-                resword = "figure";
-                goto compare;
-              case 7:
                 resword = "pre";
                 goto compare;
+              case 3:
+                resword = "form";
+                goto compare;
+              case 4:
+                resword = "col";
+                goto compare;
+              case 5:
+                resword = "footer";
+                goto compare;
+              case 6:
+                resword = "section";
+                goto compare;
+              case 7:
+                resword = "progress";
+                goto compare;
               case 8:
-                resword = "fieldset";
+                resword = "tr";
                 goto compare;
               case 9:
-                resword = "noscript";
+                resword = "colgroup";
                 goto compare;
               case 10:
-                resword = "script";
+                resword = "map";
                 goto compare;
               case 11:
-                resword = "style";
-                goto compare;
-              case 12:
-                resword = "dl";
+                resword = "body";
                 goto compare;
               case 13:
-                resword = "ol";
+                resword = "tbody";
                 goto compare;
               case 14:
-                resword = "ul";
+                resword = "textarea";
                 goto compare;
               case 15:
-                resword = "math";
+                resword = "canvas";
                 goto compare;
               case 16:
-                resword = "ins";
+                resword = "caption";
                 goto compare;
               case 17:
-                resword = "h5";
-                goto compare;
-              case 18:
-                resword = "iframe";
-                goto compare;
-              case 19:
-                resword = "h4";
-                goto compare;
-              case 20:
-                resword = "h3";
-                goto compare;
-              case 21:
                 resword = "blockquote";
                 goto compare;
+              case 18:
+                resword = "figure";
+                goto compare;
+              case 19:
+                resword = "table";
+                goto compare;
+              case 20:
+                resword = "fieldset";
+                goto compare;
+              case 21:
+                resword = "dl";
+                goto compare;
               case 22:
-                resword = "h2";
+                resword = "figcaption";
                 goto compare;
               case 23:
+                resword = "hr";
+                goto compare;
+              case 24:
+                resword = "button";
+                goto compare;
+              case 25:
+                resword = "script";
+                goto compare;
+              case 26:
+                resword = "ul";
+                goto compare;
+              case 27:
+                resword = "header";
+                goto compare;
+              case 28:
+                resword = "video";
+                goto compare;
+              case 29:
+                resword = "style";
+                goto compare;
+              case 30:
+                resword = "ol";
+                goto compare;
+              case 31:
+                resword = "th";
+                goto compare;
+              case 32:
+                resword = "article";
+                goto compare;
+              case 33:
+                resword = "tfoot";
+                goto compare;
+              case 34:
+                resword = "thead";
+                goto compare;
+              case 35:
+                resword = "div";
+                goto compare;
+              case 36:
+                resword = "object";
+                goto compare;
+              case 37:
+                resword = "aside";
+                goto compare;
+              case 38:
+                resword = "td";
+                goto compare;
+              case 39:
+                resword = "embed";
+                goto compare;
+              case 40:
+                resword = "li";
+                goto compare;
+              case 41:
+                resword = "h6";
+                goto compare;
+              case 42:
+                resword = "h5";
+                goto compare;
+              case 43:
+                resword = "h4";
+                goto compare;
+              case 44:
+                resword = "h3";
+                goto compare;
+              case 45:
+                resword = "output";
+                goto compare;
+              case 46:
+                resword = "dt";
+                goto compare;
+              case 47:
+                resword = "h2";
+                goto compare;
+              case 48:
                 resword = "h1";
+                goto compare;
+              case 49:
+                resword = "hgroup";
+                goto compare;
+              case 50:
+                resword = "iframe";
+                goto compare;
+              case 51:
+                resword = "dd";
                 goto compare;
             }
           return 0;

@@ -15,153 +15,232 @@ extern "C" {
  * CONSTANTS *
  *************/
 
-typedef enum hoedown_extensions {
-	/* block-level extensions */
-	HOEDOWN_EXT_TABLES = (1 << 0),
-	HOEDOWN_EXT_FENCED_CODE = (1 << 1),
-	HOEDOWN_EXT_FOOTNOTES = (1 << 2),
+typedef enum hoedown_features {
+  /* Block constructs */
+  HOEDOWN_FT_DIRECTIVE = (1 << 0),
+  HOEDOWN_FT_INDENTED_CODE_BLOCK = (1 << 1),
+  HOEDOWN_FT_FENCED_CODE_BLOCK = (1 << 2),
+  HOEDOWN_FT_HORIZONTAL_RULE = (1 << 3),
+  HOEDOWN_FT_ATX_HEADER = (1 << 4),
+  HOEDOWN_FT_SETEXT_HEADER = (1 << 5),
+  HOEDOWN_FT_LIST = (1 << 8),
+  HOEDOWN_FT_QUOTE_BLOCK = (1 << 31),
+  HOEDOWN_FT_HTML_BLOCK = (1 << 6),
+  HOEDOWN_FT_TABLE = (1 << 7),
 
-	/* span-level extensions */
-	HOEDOWN_EXT_AUTOLINK = (1 << 3),
-	HOEDOWN_EXT_STRIKETHROUGH = (1 << 4),
-	HOEDOWN_EXT_UNDERLINE = (1 << 5),
-	HOEDOWN_EXT_HIGHLIGHT = (1 << 6),
-	HOEDOWN_EXT_QUOTE = (1 << 7),
-	HOEDOWN_EXT_SUPERSCRIPT = (1 << 8),
-	HOEDOWN_EXT_MATH = (1 << 9),
+  /* Inline constructs */
+  HOEDOWN_FT_ROLE = (1 << 9),
+  HOEDOWN_FT_ESCAPE = (1 << 10),
+  HOEDOWN_FT_HARD_LINEBREAK = (1 << 11),
+  HOEDOWN_FT_LINEBREAK = (1 << 12),
+  HOEDOWN_FT_SOFT_LINEBREAK = (1 << 13),
+  HOEDOWN_FT_URI_AUTOLINK = (1 << 14),
+  HOEDOWN_FT_EMAIL_AUTOLINK = (1 << 15),
+  HOEDOWN_FT_HTML = (1 << 16),
+  HOEDOWN_FT_ENTITY = (1 << 17),
+  HOEDOWN_FT_CODE_SPAN = (1 << 18),
+  HOEDOWN_FT_EMPHASIS = (1 << 19),
+  HOEDOWN_FT_LINK = (1 << 20),
+  HOEDOWN_FT_MATH = (1 << 22),
+  HOEDOWN_FT_SUPERSCRIPT = (1 << 23),
+  HOEDOWN_FT_QUOTE = (1 << 24),
+  HOEDOWN_FT_STRIKETHROUGH = (1 << 25),
+  HOEDOWN_FT_HIGHLIGHT = (1 << 26),
+  HOEDOWN_FT_FOOTNOTE = (1 << 27),
 
-	/* other flags */
-	HOEDOWN_EXT_NO_INTRA_EMPHASIS = (1 << 11),
-	HOEDOWN_EXT_SPACE_HEADERS = (1 << 12),
-	HOEDOWN_EXT_MATH_EXPLICIT = (1 << 13),
+  /* Other features */
+  HOEDOWN_FT_PREPROCESS = (1 << 28),
 
-	/* negative flags */
-	HOEDOWN_EXT_DISABLE_INDENTED_CODE = (1 << 14)
-} hoedown_extensions;
+  /* Flags */
+  HOEDOWN_FT_LINK_IMAGE = (1 << 21),
+  HOEDOWN_FT_INTRA_EMPHASIS = (1 << 29),
+  HOEDOWN_FT_MATH_EXPLICIT = (1 << 30),
+} hoedown_features;
 
-#define HOEDOWN_EXT_BLOCK (\
-	HOEDOWN_EXT_TABLES |\
-	HOEDOWN_EXT_FENCED_CODE |\
-	HOEDOWN_EXT_FOOTNOTES )
 
-#define HOEDOWN_EXT_SPAN (\
-	HOEDOWN_EXT_AUTOLINK |\
-	HOEDOWN_EXT_STRIKETHROUGH |\
-	HOEDOWN_EXT_UNDERLINE |\
-	HOEDOWN_EXT_HIGHLIGHT |\
-	HOEDOWN_EXT_QUOTE |\
-	HOEDOWN_EXT_SUPERSCRIPT |\
-	HOEDOWN_EXT_MATH )
+#define HOEDOWN_FT_BLOCK (\
+  HOEDOWN_FT_DIRECTIVE |\
+  HOEDOWN_FT_INDENTED_CODE_BLOCK |\
+  HOEDOWN_FT_FENCED_CODE_BLOCK |\
+  HOEDOWN_FT_HORIZONTAL_RULE |\
+  HOEDOWN_FT_ATX_HEADER |\
+  HOEDOWN_FT_SETEXT_HEADER |\
+  HOEDOWN_FT_LIST |\
+  HOEDOWN_FT_QUOTE_BLOCK |\
+  HOEDOWN_FT_HTML_BLOCK |\
+  HOEDOWN_FT_TABLE |\
+0)
 
-#define HOEDOWN_EXT_FLAGS (\
-	HOEDOWN_EXT_NO_INTRA_EMPHASIS |\
-	HOEDOWN_EXT_SPACE_HEADERS |\
-	HOEDOWN_EXT_MATH_EXPLICIT )
+#define HOEDOWN_FT_INLINE (\
+  HOEDOWN_FT_ROLE |\
+  HOEDOWN_FT_ESCAPE |\
+  HOEDOWN_FT_HARD_LINEBREAK |\
+  HOEDOWN_FT_LINEBREAK |\
+  HOEDOWN_FT_SOFT_LINEBREAK |\
+  HOEDOWN_FT_URI_AUTOLINK |\
+  HOEDOWN_FT_EMAIL_AUTOLINK |\
+  HOEDOWN_FT_HTML |\
+  HOEDOWN_FT_ENTITY |\
+  HOEDOWN_FT_CODE_SPAN |\
+  HOEDOWN_FT_EMPHASIS |\
+  HOEDOWN_FT_LINK |\
+  HOEDOWN_FT_MATH |\
+  HOEDOWN_FT_SUPERSCRIPT |\
+  HOEDOWN_FT_QUOTE |\
+  HOEDOWN_FT_STRIKETHROUGH |\
+  HOEDOWN_FT_HIGHLIGHT |\
+  HOEDOWN_FT_FOOTNOTE |\
+0)
 
-#define HOEDOWN_EXT_NEGATIVE (\
-	HOEDOWN_EXT_DISABLE_INDENTED_CODE )
+#define HOEDOWN_FT_OTHER (\
+  HOEDOWN_FT_PREPROCESS |\
+0)
 
-typedef enum hoedown_list_flags {
-	HOEDOWN_LIST_ORDERED = (1 << 0),
-	HOEDOWN_LI_BLOCK = (1 << 1)	/* <li> containing block data */
-} hoedown_list_flags;
+#define HOEDOWN_FT_FLAGS (\
+  HOEDOWN_FT_LINK_IMAGE |\
+  HOEDOWN_FT_INTRA_EMPHASIS |\
+  HOEDOWN_FT_MATH_EXPLICIT |\
+0)
 
-typedef enum hoedown_table_flags {
-	HOEDOWN_TABLE_ALIGN_LEFT = 1,
-	HOEDOWN_TABLE_ALIGN_RIGHT = 2,
-	HOEDOWN_TABLE_ALIGN_CENTER = 3,
-	HOEDOWN_TABLE_ALIGNMASK = 3,
-	HOEDOWN_TABLE_HEADER = 4
-} hoedown_table_flags;
 
-typedef enum hoedown_autolink_type {
-	HOEDOWN_AUTOLINK_NONE,		/* used internally when it is not an autolink*/
-	HOEDOWN_AUTOLINK_NORMAL,	/* normal http/http/ftp/mailto/etc link */
-	HOEDOWN_AUTOLINK_EMAIL		/* e-mail link without explit mailto: */
-} hoedown_autolink_type;
+/***********
+ * PRESETS *
+ ***********/
+
+#define HOEDOWN_FT_COMMONMARK (\
+  HOEDOWN_FT_INDENTED_CODE_BLOCK |\
+  HOEDOWN_FT_FENCED_CODE_BLOCK |\
+  HOEDOWN_FT_HORIZONTAL_RULE |\
+  HOEDOWN_FT_ATX_HEADER |\
+  HOEDOWN_FT_SETEXT_HEADER |\
+  HOEDOWN_FT_LIST |\
+  HOEDOWN_FT_QUOTE_BLOCK |\
+  HOEDOWN_FT_HTML_BLOCK |\
+\
+  HOEDOWN_FT_ESCAPE |\
+  HOEDOWN_FT_HARD_LINEBREAK |\
+  HOEDOWN_FT_LINEBREAK |\
+  HOEDOWN_FT_URI_AUTOLINK |\
+  HOEDOWN_FT_EMAIL_AUTOLINK |\
+  HOEDOWN_FT_HTML |\
+  HOEDOWN_FT_ENTITY |\
+  HOEDOWN_FT_CODE_SPAN |\
+  HOEDOWN_FT_EMPHASIS |\
+  HOEDOWN_FT_LINK |\
+\
+  HOEDOWN_FT_PREPROCESS |\
+\
+  HOEDOWN_FT_LINK_IMAGE |\
+0)
+
+#define HOEDOWN_FT_MARKDOWN (\
+  HOEDOWN_FT_INDENTED_CODE_BLOCK |\
+  HOEDOWN_FT_HORIZONTAL_RULE |\
+  HOEDOWN_FT_ATX_HEADER |\
+  HOEDOWN_FT_SETEXT_HEADER |\
+  HOEDOWN_FT_LIST |\
+  HOEDOWN_FT_QUOTE_BLOCK |\
+  HOEDOWN_FT_HTML_BLOCK |\
+\
+  HOEDOWN_FT_ESCAPE |\
+  HOEDOWN_FT_LINEBREAK |\
+  HOEDOWN_FT_URI_AUTOLINK |\
+  HOEDOWN_FT_EMAIL_AUTOLINK |\
+  HOEDOWN_FT_HTML |\
+  HOEDOWN_FT_ENTITY |\
+  HOEDOWN_FT_CODE_SPAN |\
+  HOEDOWN_FT_EMPHASIS |\
+  HOEDOWN_FT_LINK |\
+\
+  HOEDOWN_FT_PREPROCESS |\
+\
+  HOEDOWN_FT_LINK_IMAGE |\
+  HOEDOWN_FT_INTRA_EMPHASIS |\
+0)
 
 
 /*********
  * TYPES *
  *********/
 
-struct hoedown_document;
 typedef struct hoedown_document hoedown_document;
 
-struct hoedown_renderer_data {
-	void *opaque;
-};
-typedef struct hoedown_renderer_data hoedown_renderer_data;
+typedef struct hoedown_internal hoedown_internal;
 
-/* hoedown_renderer - functions for rendering parsed data */
-struct hoedown_renderer {
-	/* state object */
-	void *opaque;
+typedef struct hoedown_renderer_data {
+  void *opaque;
+  void *output;
+  hoedown_internal *doc;
+} hoedown_renderer_data;
 
-	/* block level callbacks - NULL skips the block */
-	void (*blockcode)(hoedown_buffer *ob, const hoedown_buffer *text, const hoedown_buffer *lang, const hoedown_renderer_data *data);
-	void (*blockquote)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	void (*header)(hoedown_buffer *ob, const hoedown_buffer *content, int level, const hoedown_renderer_data *data);
-	void (*hrule)(hoedown_buffer *ob, const hoedown_renderer_data *data);
-	void (*list)(hoedown_buffer *ob, const hoedown_buffer *content, hoedown_list_flags flags, const hoedown_renderer_data *data);
-	void (*listitem)(hoedown_buffer *ob, const hoedown_buffer *content, hoedown_list_flags flags, const hoedown_renderer_data *data);
-	void (*paragraph)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	void (*table)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	void (*table_header)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	void (*table_body)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	void (*table_row)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	void (*table_cell)(hoedown_buffer *ob, const hoedown_buffer *content, hoedown_table_flags flags, const hoedown_renderer_data *data);
-	void (*footnotes)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	void (*footnote_def)(hoedown_buffer *ob, const hoedown_buffer *content, unsigned int num, const hoedown_renderer_data *data);
-	void (*blockhtml)(hoedown_buffer *ob, const hoedown_buffer *text, const hoedown_renderer_data *data);
+typedef struct hoedown_renderer {
+  void *opaque;
 
-	/* span level callbacks - NULL or return 0 prints the span verbatim */
-	int (*autolink)(hoedown_buffer *ob, const hoedown_buffer *link, hoedown_autolink_type type, const hoedown_renderer_data *data);
-	int (*codespan)(hoedown_buffer *ob, const hoedown_buffer *text, const hoedown_renderer_data *data);
-	int (*double_emphasis)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	int (*emphasis)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	int (*underline)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	int (*highlight)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	int (*quote)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	int (*image)(hoedown_buffer *ob, const hoedown_buffer *link, const hoedown_buffer *title, const hoedown_buffer *alt, const hoedown_renderer_data *data);
-	int (*linebreak)(hoedown_buffer *ob, const hoedown_renderer_data *data);
-	int (*link)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_buffer *link, const hoedown_buffer *title, const hoedown_renderer_data *data);
-	int (*triple_emphasis)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	int (*strikethrough)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	int (*superscript)(hoedown_buffer *ob, const hoedown_buffer *content, const hoedown_renderer_data *data);
-	int (*footnote_ref)(hoedown_buffer *ob, unsigned int num, const hoedown_renderer_data *data);
-	int (*math)(hoedown_buffer *ob, const hoedown_buffer *text, int displaymode, const hoedown_renderer_data *data);
-	int (*raw_html)(hoedown_buffer *ob, const hoedown_buffer *text, const hoedown_renderer_data *data);
+  /* Block constructs */
+  void (*paragraph)(void *target, void *content, int is_tight, const hoedown_renderer_data *data);
+  void (*indented_code_block)(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data);
+  void (*fenced_code_block)(void *target, const hoedown_buffer *code, const hoedown_buffer *info, const hoedown_renderer_data *data);
+  void (*horizontal_rule)(void *target, const hoedown_renderer_data *data);
+  void (*atx_header)(void *target, void *content, size_t level, const hoedown_renderer_data *data);
+  void (*setext_header)(void *target, void *content, int is_double, const hoedown_renderer_data *data);
+  void (*list)(void *target, void *content, int is_ordered, int is_tight, int start, const hoedown_renderer_data *data);
+  void (*list_item)(void *target, void *content, int is_ordered, int is_tight, const hoedown_renderer_data *data);
+  void (*quote_block)(void *target, void *content, const hoedown_renderer_data *data);
+  void (*html_block)(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data);
 
-	/* low level callbacks - NULL copies input directly into the output */
-	void (*entity)(hoedown_buffer *ob, const hoedown_buffer *text, const hoedown_renderer_data *data);
-	void (*normal_text)(hoedown_buffer *ob, const hoedown_buffer *text, const hoedown_renderer_data *data);
+  /* Inline constructs */
+  void (*string)(void *target, const hoedown_buffer *text, const hoedown_renderer_data *data);
+  void (*escape)(void *target, uint8_t character, const hoedown_renderer_data *data);
+  void (*hard_linebreak)(void *target, const hoedown_renderer_data *data);
+  void (*linebreak)(void *target, const hoedown_renderer_data *data);
+  void (*uri_autolink)(void *target, const hoedown_buffer *uri, const hoedown_renderer_data *data);
+  void (*email_autolink)(void *target, const hoedown_buffer *email, const hoedown_renderer_data *data);
+  void (*html)(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data);
+  void (*entity)(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data);
+  void (*code_span)(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data);
+  void (*emphasis)(void *target, void *content, size_t level, const hoedown_renderer_data *data);
+  void (*link)(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data);
 
-	/* miscellaneous callbacks */
-	void (*doc_header)(hoedown_buffer *ob, int inline_render, const hoedown_renderer_data *data);
-	void (*doc_footer)(hoedown_buffer *ob, int inline_render, const hoedown_renderer_data *data);
-};
-typedef struct hoedown_renderer hoedown_renderer;
+  /* Global callbacks */
+  void *(*object_get)(int is_inline, const hoedown_renderer_data *data);
+  void (*object_merge)(void *target, void *content, int is_inline, const hoedown_renderer_data *data);
+  void (*object_pop)(void *target, int is_inline, const hoedown_renderer_data *data);
+
+  void (*render_start)(void *output, int is_inline, const hoedown_renderer_data *data);
+  void (*render_end)(void *output, void *target, int is_inline, const hoedown_renderer_data *data);
+} hoedown_renderer;
 
 
 /*************
  * FUNCTIONS *
  *************/
 
-/* hoedown_document_new: allocate a new document processor instance */
+/* hoedown_find_block_tag: lookup if an HTML tag name is a block */
+const char *hoedown_find_block_tag(const char *str, unsigned int len);
+
+/* hoedown_find_autolink_scheme: lookup if a scheme is well-known */
+const char *hoedown_find_autolink_scheme(const char *str, unsigned int len);
+
+/* hoedown_preprocess: preprocess input for markdown rendering */
+void hoedown_preprocess(hoedown_buffer *ob, const uint8_t *data, size_t size);
+
+
+/* hoedown_document_new: allocate a new document processor */
 hoedown_document *hoedown_document_new(
-	const hoedown_renderer *renderer,
-	hoedown_extensions extensions,
-	size_t max_nesting
-) __attribute__ ((malloc));
+  hoedown_renderer *renderer,
+  hoedown_features features,
+  size_t max_nesting
+) __attribute__((malloc));
 
-/* hoedown_document_render: render regular Markdown using the document processor */
-void hoedown_document_render(hoedown_document *doc, hoedown_buffer *ob, const uint8_t *data, size_t size);
+/* hoedown_document_render: render markdown with a document processor */
+void hoedown_document_render(
+  hoedown_document *doc,
+  void *output,
+  const uint8_t *data, size_t size,
+  int is_inline
+);
 
-/* hoedown_document_render_inline: render inline Markdown using the document processor */
-void hoedown_document_render_inline(hoedown_document *doc, hoedown_buffer *ob, const uint8_t *data, size_t size);
-
-/* hoedown_document_free: deallocate a document processor instance */
+/* hoedown_document_free: deallocate a document processor */
 void hoedown_document_free(hoedown_document *doc);
 
 
