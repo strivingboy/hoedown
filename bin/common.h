@@ -36,6 +36,7 @@ static void print_option(char short_opt, const char *long_opt, const char *descr
 
 static void print_version() {
   printf("Built with Hoedown " HOEDOWN_VERSION ".\n");
+  printf("Targets CommonMark " HOEDOWN_COMMONMARK_VERSION ".\n");
 }
 
 static int parse_options(

@@ -17,6 +17,11 @@ extern "C" {
 #define HOEDOWN_VERSION_MINOR 0
 #define HOEDOWN_VERSION_REVISION 0
 
+#define HOEDOWN_COMMONMARK_VERSION "0.7.0"
+#define HOEDOWN_COMMONMARK_VERSION_MAJOR 0
+#define HOEDOWN_COMMONMARK_VERSION_MINOR 7
+#define HOEDOWN_COMMONMARK_VERSION_REVISION 0
+
 
 /*************
  * FUNCTIONS *
@@ -24,6 +29,9 @@ extern "C" {
 
 /* hoedown_version: retrieve Hoedown's version numbers */
 void hoedown_version(int *major, int *minor, int *revision);
+
+/* hoedown_commonmark_version: retrieve target CommonMark spec version */
+void hoedown_commonmark_version(int *major, int *minor, int *revision);
 
 
 #ifdef __cplusplus
