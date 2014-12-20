@@ -509,43 +509,29 @@ static size_t html_parse_end_tag(hoedown_buffer *name, const uint8_t *data, size
   return 0;
 }
 
-// Validate that a comment's content is allowed, according to the HTML5 spec.
-static inline int html_is_valid_comment_content(const uint8_t *data, size_t size) {
-  if (size == 0) return 1;
-  if (data[0] == '>') return 0;
-  if (data[size - 1] == '-') return 0;
-
-  if (size == 1) return 1;
-  if (data[0] == '-' && data[1] == '>') return 0;
-
-  for (size_t i = 0; i+1 < size; i++)
-    if (data[i] == '-' && data[i+1] == '-') return 0;
-  return 1;
-}
-
 // Parse a comment if there's one, according to the HTML5 spec.
 // This method assumes that data[0] == '<', so check that before calling it.
 // Returns 0 if there's no comment, size of the comment otherwise.
 static size_t html_parse_comment(const uint8_t *data, size_t size) {
-  size_t i = 1, mark;
+  size_t i = 1;
   if (size < 7) return 0;
 
   // Ensure starting sequence
   if (data[1] == '!' && data[2] == '-' && data[3] == '-') i = 4;
   else return 0;
 
-  // Collect content
-  mark = i;
-  while (1) {
-    if (i+2 >= size) return 0;
-    if (data[i] == '-' && data[i+1] == '-' && data[i+2] == '>') break;
-    i++;
-  }
+  // Validate start of comment content
+  if (i+2 >= size) return 0;
+  if (data[i] == '>') return 0;
+  if (data[i] == '-' && data[i+1] == '>') return 0;
 
-  // Validate content
-  if (html_is_valid_comment_content(data + mark, i - mark))
-    return i + 3;
-  return 0;
+  // Collect content
+  while (i+2 < size && !(data[i] == '-' && data[i+1] == '-')) i++;
+  if (i+2 >= size) return 0;
+
+  // Verify end of comment
+  if (data[i+2] != '>') return 0;
+  return i + 3;
 }
 
 
