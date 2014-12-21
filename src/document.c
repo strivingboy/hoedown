@@ -1095,19 +1095,23 @@ static inline int test_atx_header(const uint8_t *data, size_t size) {
 static inline size_t parse_atx_header_end(const uint8_t *data, size_t size) {
   size_t i = size, mark;
 
-  // Retract to skip trailing spaces
+  // Forget about trailing spaces
   while (i > 0 && data[i-1] == ' ') i--;
+  size = i;
 
   // Retract to skip trailing hashes
   mark = i;
   while (i > 0 && data[i-1] == '#') i--;
-  if (i == mark) return i;
+  if (i == mark) return size;
 
   // Check that they're present, and not escaped
-  if (is_escaped(data, i)) return i + 1;
+  if (is_escaped(data, i)) return size;
 
   // Retract again to skip spaces between content and hashes
+  mark = i;
   while (i > 0 && data[i-1] == ' ') i--;
+  if (i == mark && i > 0) return size;
+
   return i;
 }
 
