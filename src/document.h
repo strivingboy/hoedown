@@ -169,7 +169,7 @@ typedef struct hoedown_internal hoedown_internal;
 
 typedef struct hoedown_renderer_data {
   void *opaque;
-  void *output;
+  void *request;
   hoedown_internal *doc;
 } hoedown_renderer_data;
 
@@ -201,13 +201,13 @@ typedef struct hoedown_renderer {
   void (*emphasis)(void *target, void *content, size_t level, const hoedown_renderer_data *data);
   void (*link)(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data);
 
-  /* Global callbacks */
+  /* Global callbacks (mandatory) */
   void *(*object_get)(int is_inline, const hoedown_renderer_data *data);
   void (*object_merge)(void *target, void *content, int is_inline, const hoedown_renderer_data *data);
   void (*object_pop)(void *target, int is_inline, const hoedown_renderer_data *data);
 
-  void (*render_start)(void *output, int is_inline, const hoedown_renderer_data *data);
-  void (*render_end)(void *output, void *target, int is_inline, const hoedown_renderer_data *data);
+  void (*render_start)(int is_inline, const hoedown_renderer_data *data);
+  void *(*render_end)(void *target, int is_inline, const hoedown_renderer_data *data);
 } hoedown_renderer;
 
 
@@ -233,11 +233,10 @@ hoedown_document *hoedown_document_new(
 ) __attribute__((malloc));
 
 /* hoedown_document_render: render markdown with a document processor */
-void hoedown_document_render(
+void *hoedown_document_render(
   hoedown_document *doc,
-  void *output,
   const uint8_t *data, size_t size,
-  int is_inline
+  int is_inline, void *request
 );
 
 /* hoedown_document_free: deallocate a document processor */

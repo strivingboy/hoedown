@@ -2373,11 +2373,10 @@ void hoedown_preprocess(hoedown_buffer *ob, const uint8_t *data, size_t size) {
   }
 }
 
-void hoedown_document_render(
+void *hoedown_document_render(
   hoedown_document *doc,
-  void *output,
   const uint8_t *data, size_t size,
-  int is_inline
+  int is_inline, void *request
 ) {
   // Initialize everything
   memset(&doc->link_refs_table, 0, sizeof(doc->link_refs_table));
@@ -2391,8 +2390,8 @@ void hoedown_document_render(
   }
 
   // Prepare
-  doc->data.output = output;
-  if (doc->rndr.render_start) doc->rndr.render_start(output, is_inline, &doc->data);
+  doc->data.request = request;
+  doc->rndr.render_start(is_inline, &doc->data);
 
   // First, parse the markers
   doc->mode = MARKER_PARSING;
@@ -2408,10 +2407,14 @@ void hoedown_document_render(
     parse_block(doc, target, data, size, size, 0);
 
   // Finish & cleanup
-  if (doc->rndr.render_end) doc->rndr.render_end(output, target, is_inline, &doc->data);
-
   doc->marker_link_refs.size = 0;
   assert(doc->current_nesting == 0);
   assert(doc->buffers_block.size == 0);
   assert(doc->buffers_inline.size == 0);
+
+  assert(doc->emphasis_stack.size == 0);
+  assert(doc->emphasis_stack.initial_size == 0);
+  assert(doc->emphasis_stack.current_target == NULL);
+
+  return doc->rndr.render_end(target, is_inline, &doc->data);
 }
