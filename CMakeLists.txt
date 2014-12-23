@@ -56,7 +56,7 @@ if (BUILD_CLI)
 
   get_target_property(HOEDOWN_LOCATION hoedown LOCATION)
   add_custom_target(test
-    perl stmd/runtests.pl stmd/spec.txt ${HOEDOWN_LOCATION}
+    python CommonMark/test/spec_tests.py --spec CommonMark/spec.txt --program "${HOEDOWN_LOCATION}"
     DEPENDS hoedown
   )
 endif (BUILD_CLI)
