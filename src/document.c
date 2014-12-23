@@ -1001,10 +1001,128 @@ static inline size_t parse_declaration(const uint8_t *data, size_t size) {
   return 0;
 }
 
+static inline void discard_emphasis(hoedown_document *doc, const uint8_t *data) {
+  struct emphasis_stack *stack = &doc->emphasis_stack;
+  void *content = *stack->current_target;
+
+  // Pop entry from stack
+  struct emphasis_entry *entry = &stack->entry[--stack->size];
+  void *target = entry->target;
+
+  if (!entry->delimiter) {
+    doc->rndr.object_pop(target, 1, &doc->data);
+    return;
+  }
+
+  // Merge content into target
+  parse_string(doc, target, data + entry->parsed, entry->start + entry->level - entry->parsed);
+  doc->rndr.object_merge(target, content, 1, &doc->data);
+
+  // Replace current target
+  *stack->current_target = target;
+  doc->rndr.object_pop(content, 1, &doc->data);
+}
+
+static inline void close_emphasis(hoedown_document *doc, const uint8_t *data) {
+  struct emphasis_stack *stack = &doc->emphasis_stack;
+  void *content = *stack->current_target;
+
+  // Pop entry from stack
+  struct emphasis_entry *entry = &stack->entry[--stack->size];
+  void *target = entry->target;
+
+  // Render emphasis
+  parse_string(doc, target, data + entry->parsed, entry->start - entry->parsed);
+  doc->rndr.emphasis(target, content, entry->level, entry->delimiter, &doc->data);
+
+  // Replace current target
+  *stack->current_target = target;
+  doc->rndr.object_pop(content, 1, &doc->data);
+}
+
+static inline void close_emphasis_partial(hoedown_document *doc, const uint8_t *data, size_t level) {
+  struct emphasis_stack *stack = &doc->emphasis_stack;
+  void *content = *stack->current_target;
+
+  // Render internal emphasis
+  struct emphasis_entry *prev = &stack->entry[stack->size-1];
+  void *target = doc->rndr.object_get(1, &doc->data);
+  doc->rndr.emphasis(target, content, level, prev->delimiter, &doc->data);
+
+  // Move current entry to the next slot
+  struct emphasis_entry *next = &stack->entry[stack->size++];
+  memcpy(next, prev, sizeof(struct emphasis_entry));
+
+  // Set previous slot to an empty entry, so that content gets poped
+  prev->target = content;
+  prev->delimiter = 0;
+
+  // Set next slot to the remaining emphasis and replace current target
+  next->level -= level;
+  *stack->current_target = target;
+}
+
+static inline int can_open_emphasis(hoedown_document *doc, const uint8_t *data, size_t parsed, size_t start, size_t size, uint8_t delimiter, size_t i) {
+  if (i >= size || is_space(data[i])) return 0;
+  if (delimiter == '_' && !(doc->ft & HOEDOWN_FT_INTRA_EMPHASIS) && start > parsed && is_alnum_ascii(data[start-1])) return 0;
+  return 1;
+}
+
+static inline int can_close_emphasis(hoedown_document *doc, const uint8_t *data, size_t parsed, size_t start, size_t size, uint8_t delimiter, size_t i) {
+  if (start > parsed && is_space(data[start-1])) return 0;
+  if (delimiter == '_' && !(doc->ft & HOEDOWN_FT_INTRA_EMPHASIS) && i < size && is_alnum_ascii(data[i])) return 0;
+  return 1;
+}
+
 // data[start] is assumed to be '*' or '_'
 static inline size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  //TODO
-  return 0;
+  uint8_t delimiter = data[start];
+  size_t i = start + 1, mark = start;
+  struct emphasis_stack *stack = &doc->emphasis_stack;
+
+  // Refuse to process the same delimiter again, otherwise advance
+  if (start > parsed && data[start-1] == delimiter) return 0;
+  while (i < size && data[i] == delimiter) i++;
+
+  // Try to close as many emphasis as possible with this delimiter
+  if (can_close_emphasis(doc, data, parsed, start, size, delimiter, i)) {
+    for (size_t e = stack->size; e > stack->initial_size; e--) {
+      if (stack->entry[e-1].delimiter != delimiter) continue;
+
+      // Found a matching emphasis, discard previous emphasis
+      while (stack->size > e) discard_emphasis(doc, data);
+
+      // Close emphasis!
+      parse_string(doc, *stack->current_target, data + parsed, mark - parsed);
+      size_t level = stack->entry[e-1].level;
+      if (level > i - mark && stack->size < stack->max_size) {
+        level = i - mark;
+        close_emphasis_partial(doc, data, level);
+      } else {
+        close_emphasis(doc, data);
+      }
+
+      // Update positions as appropiate
+      mark += level;
+      parsed = mark;
+      if (mark >= i) return i;
+    }
+  }
+
+  // Try to open an emphasis with this delimiter
+  if (can_open_emphasis(doc, data, parsed, start, size, delimiter, i) && stack->size < stack->max_size) {
+    struct emphasis_entry *entry = &stack->entry[stack->size++];
+    entry->target = *stack->current_target;
+    entry->parsed = parsed;
+    entry->start = mark;
+    entry->delimiter = delimiter;
+    entry->level = i - mark;
+
+    *stack->current_target = doc->rndr.object_get(1, &doc->data);
+    return i;
+  }
+
+  return mark > start ? mark : 0;
 }
 
 
@@ -2220,6 +2338,8 @@ static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *d
   }
 
   // Close any remaining emphasis and return stack to previous state
+  while (doc->emphasis_stack.size > doc->emphasis_stack.initial_size)
+    discard_emphasis(doc, data);
   doc->emphasis_stack.current_target = current_target;
   doc->emphasis_stack.initial_size = emphasis_size;
 

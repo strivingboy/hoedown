@@ -198,7 +198,7 @@ typedef struct hoedown_renderer {
   void (*html)(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data);
   void (*entity)(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data);
   void (*code_span)(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data);
-  void (*emphasis)(void *target, void *content, size_t level, const hoedown_renderer_data *data);
+  void (*emphasis)(void *target, void *content, size_t level, uint8_t delimiter, const hoedown_renderer_data *data);
   void (*link)(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data);
 
   /* Global callbacks (mandatory) */
