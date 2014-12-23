@@ -1494,6 +1494,7 @@ static inline int test_html_block(const uint8_t *data, size_t size) {
          size >= 4 && (data[3] == '<')))))));
 }
 
+//FIXME: rewrite it when spec problem is resolved
 static inline size_t parse_html_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, content_start, mark;
 
@@ -1552,7 +1553,7 @@ static inline size_t parse_html_block(hoedown_document *doc, void *target, const
     if (doc->mode == NORMAL_PARSING) {
       parse_paragraph(doc, target, data + parsed, start - parsed);
   
-      hoedown_buffer html = {(uint8_t *)html_data, html_size, 0, 0, NULL, NULL};
+      hoedown_buffer html = {(uint8_t *)data + start, mark - start, 0, 0, NULL, NULL};
       doc->rndr.html_block(target, &html, &doc->data);
     }
 
