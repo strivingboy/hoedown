@@ -26,14 +26,14 @@ static void object_pop(void *target, int is_inline, const hoedown_renderer_data 
   hoedown_pool_pop(&state->buffers, target);
 }
 
-static void render_end(void *output, void *target, int is_inline, const hoedown_renderer_data *data) {
+static void render_start(int is_inline, const hoedown_renderer_data *data) {
+}
+
+static void *render_end(void *target, int is_inline, const hoedown_renderer_data *data) {
   renderer_state *state = data->opaque;
-  hoedown_buffer *ob = output, *content = target;
-
-  hoedown_buffer_set(ob, content->data, content->size);
-
-  hoedown_pool_pop(&state->buffers);
+  hoedown_pool_detach(&state->buffers, target);
   assert(state->buffers.size == 0);
+  return target;
 }
 
 
@@ -289,7 +289,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
     object_merge,
     object_pop,
 
-    NULL,
+    render_start,
     render_end,
   };
 

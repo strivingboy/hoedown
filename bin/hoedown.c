@@ -183,7 +183,6 @@ struct option_data {
 
   /* I/O */
   size_t iunit;
-  size_t ounit;
   const char *filename;
 
   /* renderer */
@@ -227,11 +226,6 @@ static int parse_short_option(char opt, char *next, void *opaque) {
 
   if (opt == 'i' && isNum) {
     data->iunit = num;
-    return 2;
-  }
-
-  if (opt == 'o' && isNum) {
-    data->ounit = num;
     return 2;
   }
 
@@ -349,10 +343,6 @@ static int parse_long_option(char *opt, char *next, void *opaque) {
     data->iunit = num;
     return 2;
   }
-  if (strcmp(opt, "output-unit")==0 && isNum) {
-    data->ounit = num;
-    return 2;
-  }
 
   if (strcmp(opt, "html")==0) {
     data->renderer = RENDERER_HTML;
@@ -400,7 +390,6 @@ int main(int argc, char **argv) {
   data.done = 0;
   data.show_time = 0;
   data.iunit = DEF_IUNIT;
-  data.ounit = DEF_OUNIT;
   data.filename = NULL;
   data.renderer = RENDERER_HTML;
   data.is_inline = 0;
@@ -447,15 +436,26 @@ int main(int argc, char **argv) {
   };
 
   /* Perform Markdown rendering */
-  ob = hoedown_buffer_new(data.ounit);
   document = hoedown_document_new(renderer, data.features, data.max_nesting);
 
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-  hoedown_document_render(document, ob, ib->data, ib->size, data.is_inline);
+  ob = hoedown_document_render(document, ib->data, ib->size, data.is_inline, NULL);
   clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
+
+  /* Cleanup */
+  hoedown_buffer_free(ib);
+
+  hoedown_document_free(document);
+  renderer_free(renderer);
 
   /* Write the result to stdout */
   (void)fwrite(ob->data, 1, ob->size, stdout);
+  hoedown_buffer_free(ob);
+
+  if (ferror(stdout)) {
+    fprintf(stderr, "I/O errors found while writing output.\n");
+    return 5;
+  }
 
   /* Show rendering time */
   if (data.show_time) {
@@ -464,18 +464,6 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Time spent on rendering: %.2f ms.\n", ((double)elapsed)/1e6);
     else
       fprintf(stderr, "Time spent on rendering: %.3f s.\n", ((double)elapsed)/1e9);
-  }
-
-  /* Cleanup */
-  hoedown_buffer_free(ib);
-  hoedown_buffer_free(ob);
-
-  hoedown_document_free(document);
-  renderer_free(renderer);
-
-  if (ferror(stdout)) {
-    fprintf(stderr, "I/O errors found while writing output.\n");
-    return 5;
   }
 
   return 0;

@@ -32,8 +32,8 @@ static void *object_get(int is_inline, const hoedown_renderer_data *data) { retu
 static void object_merge(void *target, void *content, int is_inline, const hoedown_renderer_data *data) {}
 static void object_pop(void *target, int is_inline, const hoedown_renderer_data *data) {}
 
-static void render_start(void *output, int is_inline, const hoedown_renderer_data *data) {}
-static void render_end(void *output, void *target, int is_inline, const hoedown_renderer_data *data) {}
+static void render_start(int is_inline, const hoedown_renderer_data *data) {}
+static void *render_end(void *target, int is_inline, const hoedown_renderer_data *data) { return NULL; }
 
 
 /* Exported API */
