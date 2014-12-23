@@ -1,5 +1,7 @@
 #include "pool.h"
 
+#include <assert.h>
+
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 
@@ -37,8 +39,19 @@ void *hoedown_pool_get(hoedown_pool *pool) {
   return pool->item[pool->size++];
 }
 
-void hoedown_pool_pop(hoedown_pool *pool) {
+void hoedown_pool_pop(hoedown_pool *pool, void *item) {
+  assert(pool->size > 0);
   pool->size--;
+  assert(pool->item[pool->size] == item);
+}
+
+void hoedown_pool_detach(hoedown_pool *pool, void *item) {
+  hoedown_pool_pop(pool, item);
+
+  if (likely(pool->isize-1 > pool->size))
+    pool->item[pool->size] = pool->item[pool->isize-1];
+
+  pool->isize--;
 }
 
 void hoedown_pool_uninit(hoedown_pool *pool) {

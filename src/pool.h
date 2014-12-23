@@ -43,7 +43,10 @@ void hoedown_pool_init(
 void *hoedown_pool_get(hoedown_pool *pool);
 
 /* hoedown_pool_pop: unreserve the last reserved object from the pool */
-void hoedown_pool_pop(hoedown_pool *pool);
+void hoedown_pool_pop(hoedown_pool *pool, void *item);
+
+/* hoedown_pool_detach: unreserve and disown the last reserved object from the pool */
+void hoedown_pool_detach(hoedown_pool *pool, void *item);
 
 /* hoedown_pool_uninit: uninitialize a pool of objects */
 void hoedown_pool_uninit(hoedown_pool *pool);
