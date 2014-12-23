@@ -975,99 +975,10 @@ static inline size_t parse_declaration(const uint8_t *data, size_t size) {
   return 0;
 }
 
-// data[start] is assumed to be a valid emphasis delimiter
-static int check_emphasis_end(hoedown_document *doc, const uint8_t *data, size_t parsed, size_t start, size_t size, void *opaque) {
-  uint8_t delimiter = data[start];
-  size_t i = start;
-  size_t *count = opaque;
-
-  // Validate end delimiter
-  if (parsed < start && (data[start-1] == delimiter || is_space(data[start-1]))) return 0;
-
-  // Count number of characters in the delimiter
-  i++;
-  while (i < size && data[i] == delimiter) i++;
-  *count = i - start;
-
-  // Further validate delimiter
-  if (delimiter == '_' && !(doc->ft & HOEDOWN_FT_INTRA_EMPHASIS) && i < size && is_alnum_ascii(data[i])) return 0;
-  if (*count > 3) return 0;
-
-  return 1;
-}
-
 // data[start] is assumed to be '*' or '_'
 static inline size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  uint8_t delimiter = data[start];
-  size_t i = start, mark;
-  size_t open, close, total_open;
-  void *content;
-
-  void *reserved_objects [3];
-  size_t reserved_count = 3;
-
-  //FIXME: refactor the object allocation part
-
-  // Validate start delimiter
-  if (parsed < start && data[start-1] == delimiter) return 0;
-  if (delimiter == '_' && !(doc->ft & HOEDOWN_FT_INTRA_EMPHASIS) && parsed < start && is_alnum_ascii(data[start-1])) return 0;
-
-  // Count number of characters in the delimiter
-  i++;
-  while (i < size && data[i] == delimiter) i++;
-  open = i - start;
-
-  // Furter validate delimiter
-  if (i < size && is_space(data[i])) return 0;
-  if (open > 3) return 0;
-  total_open = open;
-
-  // We can't allocate on the way, since that wouldn't be
-  // stack-based. So we reserve all three objects now.
-  reserved_objects[0] = doc->rndr.object_get(1, &doc->data);
-  reserved_objects[1] = doc->rndr.object_get(1, &doc->data);
-  reserved_objects[2] = doc->rndr.object_get(1, &doc->data);
-
-  // Parse the content of our [nested] emphasis
-  content = doc->rndr.object_get(1, &doc->data);
-  while (1) {
-    void *subcontent = doc->rndr.object_get(1, &doc->data);
-    mark = i;
-    i += parse_inline(doc, subcontent, data + i, size - i, delimiter, check_emphasis_end, &close);
-
-    if (i >= size) {
-      // No delimiter found
-      doc->rndr.object_pop(subcontent, 1, &doc->data);
-      i = mark;
-      break;
-    }
-
-    // [Nested] emphasis of level `close` was found! Render it
-    if (close >= open) close = open;
-
-    doc->rndr.object_merge(content, subcontent, 1, &doc->data);
-    subcontent = content;
-    content = reserved_objects[--reserved_count];
-    doc->rndr.emphasis(content, subcontent, close, &doc->data);
-
-    i += close;
-    open -= close;
-    if (!open) break;
-  }
-
-  if (total_open > open) {
-    // Content now has the top-level parsed emphasis, merge!
-    start += open;
-    parse_string(doc, target, data + parsed, start - parsed);
-    doc->rndr.object_merge(target, content, 1, &doc->data);
-  } else {
-    doc->rndr.object_pop(content, 1, &doc->data);
-    i = 0;
-  }
-
-  // Deallocate (merge) unused objects
-  while (reserved_count) doc->rndr.object_pop(reserved_objects[--reserved_count], 1, &doc->data);
-  return i;
+  //TODO
+  return 0;
 }
 
 
