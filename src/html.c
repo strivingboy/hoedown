@@ -201,23 +201,19 @@ static void rndr_code_span(void *target, const hoedown_buffer *code, const hoedo
   HOEDOWN_BUFPUTSL(ob, "</code>");
 }
 
-static void rndr_emphasis(void *target, void *content_, size_t level, const hoedown_renderer_data *data) {
+static void rndr_emphasis(void *target, void *content_, size_t level, uint8_t delimiter, const hoedown_renderer_data *data) {
   hoedown_buffer *ob = target, *content = content_;
+  int strongs = level / 2, em = level % 2;
 
-  if (level == 3) {
-    HOEDOWN_BUFPUTSL(ob, "<strong><em>");
-    hoedown_buffer_put(ob, content->data, content->size);
-    HOEDOWN_BUFPUTSL(ob, "</em></strong>");
-  } else if (level == 2) {
+  for (int i = 0; i < strongs; i++)
     HOEDOWN_BUFPUTSL(ob, "<strong>");
-    hoedown_buffer_put(ob, content->data, content->size);
-    HOEDOWN_BUFPUTSL(ob, "</strong>");
-  } else {
-    HOEDOWN_BUFPUTSL(ob, "<em>");
-    hoedown_buffer_put(ob, content->data, content->size);
-    HOEDOWN_BUFPUTSL(ob, "</em>");
-  }
+  if (em) HOEDOWN_BUFPUTSL(ob, "<em>");
 
+  hoedown_buffer_put(ob, content->data, content->size);
+
+  if (em) HOEDOWN_BUFPUTSL(ob, "</em>");
+  for (int i = 0; i < strongs; i++)
+    HOEDOWN_BUFPUTSL(ob, "</strong>");
 }
 
 static void rndr_link(void *target, void *content_, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data) {
