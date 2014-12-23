@@ -17,15 +17,13 @@ static void *object_get(int is_inline, const hoedown_renderer_data *data) {
 }
 
 static void object_merge(void *target, void *content_, int is_inline, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
   hoedown_buffer *ob = target, *content = content_;
   hoedown_buffer_put(ob, content->data, content->size);
-  hoedown_pool_pop(&state->buffers);
 }
 
 static void object_pop(void *target, int is_inline, const hoedown_renderer_data *data) {
   renderer_state *state = data->opaque;
-  hoedown_pool_pop(&state->buffers);
+  hoedown_pool_pop(&state->buffers, target);
 }
 
 static void render_end(void *output, void *target, int is_inline, const hoedown_renderer_data *data) {
@@ -42,7 +40,6 @@ static void render_end(void *output, void *target, int is_inline, const hoedown_
 // BLOCK CONSTRUCTS
 
 static void rndr_paragraph(void *target, void *content_, int is_tight, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
   hoedown_buffer *ob = target, *content = content_;
 
   if (is_tight) {
@@ -53,8 +50,6 @@ static void rndr_paragraph(void *target, void *content_, int is_tight, const hoe
     hoedown_buffer_put(ob, content->data, content->size);
     HOEDOWN_BUFPUTSL(ob, "</p>\n");
   }
-
-  hoedown_pool_pop(&state->buffers);
 }
 
 static void rndr_indented_code_block(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {
@@ -90,29 +85,22 @@ static void rndr_horizontal_rule(void *target, const hoedown_renderer_data *data
 }
 
 static void rndr_atx_header(void *target, void *content_, size_t level, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
   hoedown_buffer *ob = target, *content = content_;
 
   hoedown_buffer_printf(ob, "<h%lu>", level);
   hoedown_buffer_put(ob, content->data, content->size);
   hoedown_buffer_printf(ob, "</h%lu>\n", level);
-
-  hoedown_pool_pop(&state->buffers);
 }
 
 static void rndr_setext_header(void *target, void *content_, int is_double, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
   hoedown_buffer *ob = target, *content = content_;
 
   hoedown_buffer_put(ob, (uint8_t *)(is_double ? "<h1>" : "<h2>"), 4);
   hoedown_buffer_put(ob, content->data, content->size);
   hoedown_buffer_put(ob, (uint8_t *)(is_double ? "</h1>\n" : "</h2>\n"), 6);
-
-  hoedown_pool_pop(&state->buffers);
 }
 
 static void rndr_list(void *target, void *content_, int is_ordered, int is_tight, int start, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
   hoedown_buffer *ob = target, *content = content_;
 
   hoedown_buffer_put(ob, (uint8_t *)(is_ordered ? "<ol" : "<ul"), 3);
@@ -121,12 +109,9 @@ static void rndr_list(void *target, void *content_, int is_ordered, int is_tight
 
   hoedown_buffer_put(ob, content->data, content->size);
   hoedown_buffer_put(ob, (uint8_t *)(is_ordered ? "</ol>\n" : "</ul>\n"), 6);
-
-  hoedown_pool_pop(&state->buffers);
 }
 
 static void rndr_list_item(void *target, void *content_, int is_ordered, int is_tight, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
   hoedown_buffer *ob = target, *content = content_;
 
   HOEDOWN_BUFPUTSL(ob, "<li>");
@@ -136,19 +121,14 @@ static void rndr_list_item(void *target, void *content_, int is_ordered, int is_
   if (is_tight && ob->data[ob->size-1] == '\n') ob->size--;
 
   HOEDOWN_BUFPUTSL(ob, "</li>\n");
-
-  hoedown_pool_pop(&state->buffers);
 }
 
 static void rndr_quote_block(void *target, void *content_, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
   hoedown_buffer *ob = target, *content = content_;
 
   HOEDOWN_BUFPUTSL(ob, "<blockquote>\n");
   hoedown_buffer_put(ob, content->data, content->size);
   HOEDOWN_BUFPUTSL(ob, "</blockquote>\n");
-
-  hoedown_pool_pop(&state->buffers);
 }
 
 static void rndr_html_block(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data) {
@@ -222,7 +202,6 @@ static void rndr_code_span(void *target, const hoedown_buffer *code, const hoedo
 }
 
 static void rndr_emphasis(void *target, void *content_, size_t level, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
   hoedown_buffer *ob = target, *content = content_;
 
   if (level == 3) {
@@ -239,11 +218,9 @@ static void rndr_emphasis(void *target, void *content_, size_t level, const hoed
     HOEDOWN_BUFPUTSL(ob, "</em>");
   }
 
-  hoedown_pool_pop(&state->buffers);
 }
 
 static void rndr_link(void *target, void *content_, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
   hoedown_buffer *ob = target, *content = content_;
 
   if (is_image) {
@@ -275,8 +252,6 @@ static void rndr_link(void *target, void *content_, const hoedown_buffer *dest, 
     hoedown_buffer_put(ob, content->data, content->size);
     HOEDOWN_BUFPUTSL(ob, "</a>");
   }
-
-  hoedown_pool_pop(&state->buffers);
 }
 
 

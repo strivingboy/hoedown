@@ -906,6 +906,7 @@ static inline size_t parse_link(hoedown_document *doc, void *target, const uint8
     // We have a valid link
     parse_string(doc, target, data + parsed, start - parsed);
     doc->rndr.link(target, content, spec->dest, spec->has_title ? spec->title : NULL, is_image, &doc->data);
+    doc->rndr.object_pop(content, 1, &doc->data);
     return i;
   } else {
     doc->rndr.object_pop(content, 1, &doc->data);
@@ -1083,6 +1084,7 @@ static inline void parse_paragraph(hoedown_document *doc, void *target, const ui
   void *content = doc->rndr.object_get(1, &doc->data);
   parse_inline(doc, content, data + content_start, content_end - content_start, 0, NULL, NULL);
   doc->rndr.paragraph(target, content, doc->is_tight == doc->current_nesting, &doc->data);
+  doc->rndr.object_pop(content, 1, &doc->data);
 }
 
 static inline int test_atx_header(const uint8_t *data, size_t size) {
@@ -1151,6 +1153,7 @@ static inline size_t parse_atx_header(hoedown_document *doc, void *target, const
     void *content = doc->rndr.object_get(1, &doc->data);
     parse_inline(doc, content, data + content_start, mark - content_start, 0, NULL, NULL);
     doc->rndr.atx_header(target, content, level, &doc->data);
+    doc->rndr.object_pop(content, 1, &doc->data);
   }
 
   return i;
@@ -1201,6 +1204,7 @@ static inline size_t parse_setext_header(hoedown_document *doc, void *target, co
     void *content = doc->rndr.object_get(1, &doc->data);
     parse_inline(doc, content, data + content_start, content_end - content_start, 0, NULL, NULL);
     doc->rndr.setext_header(target, content, character == '=', &doc->data);
+    doc->rndr.object_pop(content, 1, &doc->data);
   }
 
   return i;
@@ -1734,6 +1738,7 @@ static inline size_t parse_quote_block(hoedown_document *doc, void *target, cons
   if (doc->mode == NORMAL_PARSING) {
     parse_paragraph(doc, target, data + parsed, start - parsed);
     doc->rndr.quote_block(target, content, &doc->data);
+    doc->rndr.object_pop(content, 0, &doc->data);
   }
 
   hoedown_pool_pop(&doc->buffers_block, work);
@@ -1995,6 +2000,7 @@ static inline size_t parse_list(hoedown_document *doc, void *target, const uint8
   if (current_mode == NORMAL_PARSING) {
     parse_paragraph(doc, target, data + parsed, start - parsed);
     doc->rndr.list(target, content, is_ordered, !is_loose, number, &doc->data);
+    doc->rndr.object_pop(content, 0, &doc->data);
   }
   return i;
 }
