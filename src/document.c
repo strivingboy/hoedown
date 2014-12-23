@@ -2209,29 +2209,35 @@ static size_t char_escape(hoedown_document *doc, void *target, const uint8_t *da
   if (doc->ft & HOEDOWN_FT_HARD_LINEBREAK && data[i] == '\n') {
     parse_string(doc, target, data + parsed, start - parsed);
     doc->rndr.hard_linebreak(target, &doc->data);
-    return i + 1;
+
+    i++;
+    while (i < size && data[i] == ' ') i++;
+    return i;
   }
 
   return 0;
 }
 
 static size_t char_newline(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  size_t i = start;
-  // Rewind on all trailing spaces
-  while (i > parsed && data[i-1] == ' ') i--;
+  size_t tail = start, head = start + 1;
 
-  if (doc->ft & HOEDOWN_FT_LINEBREAK && start - i >= 2) {
-    parse_string(doc, target, data + parsed, i - parsed);
+  // Rewind on all trailing spaces
+  while (tail > parsed && data[tail-1] == ' ') tail--;
+  // Skip all leading spaces
+  while (head < size && data[head] == ' ') head++;
+
+  if (doc->ft & HOEDOWN_FT_LINEBREAK && start - tail >= 2) {
+    parse_string(doc, target, data + parsed, tail - parsed);
     doc->rndr.hard_linebreak(target, &doc->data);
-    return start + 1;
+    return head;
   }
 
   //FIXME: SOFT_LINEBREAK
 
-  if (i == start) return 0;
-  parse_string(doc, target, data + parsed, i - parsed);
-  parse_string(doc, target, data + start, 1);
-  return start + 1;
+  if (tail == start && head == start + 1) return 0;
+  parse_string(doc, target, data + parsed, tail - parsed);
+  parse_string(doc, target, (const uint8_t *)"\n", 1);
+  return head;
 }
 
 static size_t char_angle_bracket(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
