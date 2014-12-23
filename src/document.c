@@ -72,6 +72,23 @@ enum parsing_mode {
   NORMAL_PARSING,
 };
 
+struct emphasis_entry {
+  void *target;
+  size_t parsed;
+  size_t start;
+
+  uint8_t delimiter;
+  size_t level;
+};
+
+struct emphasis_stack {
+  void **current_target;
+  size_t initial_size;
+  size_t max_size;
+  size_t size;
+  struct emphasis_entry *entry;
+};
+
 struct hoedown_document {
   // user-specified
   hoedown_renderer rndr;
@@ -81,21 +98,24 @@ struct hoedown_document {
   // for renderer use
   hoedown_renderer_data data;
 
-  // for general operation
+  // for all parsing
   size_t current_nesting;
-  size_t is_tight;
   enum parsing_mode mode;
-  int inside_link;
   hoedown_buffer *text;
+  hoedown_pool buffers_block;
+  hoedown_pool buffers_inline;
+
+  // for block parsing
+  size_t is_tight;
+
+  // for inline parsing
+  char_trigger active_chars[256];
+  struct emphasis_stack emphasis_stack;
+  int inside_link;
 
   // for marker parsing
   hoedown_pool marker_link_refs;
   struct link_ref *link_refs_table [LINK_REFS_TABLE_SIZE];
-
-  // for normal parsing
-  hoedown_pool buffers_block;
-  hoedown_pool buffers_inline;
-  char_trigger active_chars[256];
 };
 
 hoedown_document *hoedown_document_new(
@@ -115,16 +135,21 @@ hoedown_document *hoedown_document_new(
   doc->data.opaque = renderer->opaque;
 
   doc->current_nesting = 0;
-  doc->inside_link = 0;
-  doc->is_tight = 0;
   doc->text = hoedown_buffer_new(64);
+  hoedown_buffer_pool_init(&doc->buffers_block, 4, 16);
+  hoedown_buffer_pool_init(&doc->buffers_inline, 8, 16);
+
+  doc->is_tight = 0;
+
+  set_active_chars(doc->active_chars, features);
+  doc->emphasis_stack.current_target = NULL;
+  doc->emphasis_stack.initial_size = 0;
+  doc->emphasis_stack.max_size = max_nesting;
+  doc->emphasis_stack.entry = hoedown_calloc(max_nesting, sizeof(struct emphasis_entry));
+  doc->inside_link = 0;
 
   //FIXME: this needs limiting
   hoedown_pool_init(&doc->marker_link_refs, 4, new_link_ref, free_link_ref, NULL);
-
-  hoedown_buffer_pool_init(&doc->buffers_block, 4, 16);
-  hoedown_buffer_pool_init(&doc->buffers_inline, 8, 16);
-  set_active_chars(doc->active_chars, features);
 
   return doc;
 }
@@ -133,11 +158,12 @@ void hoedown_document_free(hoedown_document *doc) {
   if (!doc) return;
 
   hoedown_buffer_free(doc->text);
-
-  hoedown_pool_uninit(&doc->marker_link_refs);
-
   hoedown_pool_uninit(&doc->buffers_block);
   hoedown_pool_uninit(&doc->buffers_inline);
+
+  free(doc->emphasis_stack.entry);
+
+  hoedown_pool_uninit(&doc->marker_link_refs);
 
   free(doc);
 }
@@ -2163,6 +2189,12 @@ static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *d
   size_t i = 0, result, parsed = 0;
   char_trigger *active_chars = doc->active_chars;
   
+  // Save current state of the emphasis stack
+  void **current_target = doc->emphasis_stack.current_target;
+  doc->emphasis_stack.current_target = &target;
+  size_t emphasis_size = doc->emphasis_stack.initial_size;
+  doc->emphasis_stack.initial_size = doc->emphasis_stack.size;
+
   while (i < size) {
     // Skip any chars we're not interested in
     if (delimiter) {
@@ -2186,6 +2218,10 @@ static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *d
     // Okay, skip this character and move on
     i++;
   }
+
+  // Close any remaining emphasis and return stack to previous state
+  doc->emphasis_stack.current_target = current_target;
+  doc->emphasis_stack.initial_size = emphasis_size;
 
   // Parse rest of content as string
   parse_string(doc, target, data + parsed, i - parsed);
