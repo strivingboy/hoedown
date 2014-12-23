@@ -321,7 +321,7 @@ static inline void unescape_both(hoedown_document *doc, hoedown_buffer *ob, cons
   unescape_backslash(intermediate, data, size);
   hoedown_unescape_html(ob, intermediate->data, intermediate->size);
 
-  hoedown_pool_pop(&doc->buffers_inline);
+  hoedown_pool_pop(&doc->buffers_inline, intermediate);
 }
 
 
@@ -734,7 +734,7 @@ static inline size_t parse_code_span(hoedown_document *doc, void *target, const 
   collapse_spacing(code, data + content_start, mark - content_start);
 
   doc->rndr.code_span(target, code, &doc->data);
-  hoedown_pool_pop(&doc->buffers_block);
+  hoedown_pool_pop(&doc->buffers_block, code);
   return i;
 }
 
@@ -831,7 +831,7 @@ static inline size_t parse_link_target_reference(hoedown_document *doc, struct l
     collapse_spacing(label, content->data, content->size);
 
   *spec = find_link_ref(doc, hash_string(label->data, label->size));
-  hoedown_pool_pop(&doc->buffers_inline);
+  hoedown_pool_pop(&doc->buffers_inline, label);
   return i + 1;
 }
 
@@ -845,7 +845,7 @@ static inline size_t parse_link_target(hoedown_document *doc, struct link_ref **
   // only called by `parse_link`...
   *spec = hoedown_pool_get(&doc->marker_link_refs);
   result = parse_link_target_inline(doc, *spec, data, size);
-  hoedown_pool_pop(&doc->marker_link_refs);
+  hoedown_pool_pop(&doc->marker_link_refs, *spec);
 
   if (result) return result;
 
@@ -860,7 +860,7 @@ static inline size_t parse_link_target(hoedown_document *doc, struct link_ref **
   label->size = 0;
   collapse_spacing(label, content->data, content->size);
   *spec = find_link_ref(doc, hash_string(label->data, label->size));
-  hoedown_pool_pop(&doc->buffers_inline);
+  hoedown_pool_pop(&doc->buffers_inline, label);
   return 0;
 }
 
@@ -1302,7 +1302,7 @@ static inline size_t parse_indented_code_block(hoedown_document *doc, void *targ
     doc->rndr.indented_code_block(target, code, &doc->data);
   }
 
-  hoedown_pool_pop(&doc->buffers_block);
+  hoedown_pool_pop(&doc->buffers_block, code);
   return i;
 }
 
@@ -1393,7 +1393,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
     parse_paragraph(doc, target, data + parsed, start - parsed);
 
     doc->rndr.fenced_code_block(target, code, info->size ? info : NULL, &doc->data);
-    hoedown_pool_pop(&doc->buffers_block);
+    hoedown_pool_pop(&doc->buffers_block, code);
   } else {
     // Optimization: When indentation is 0 we don't need intermediate buffers.
     size_t text_start = i, line_start;
@@ -1423,7 +1423,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
   }
 
   if (doc->mode == NORMAL_PARSING)
-    hoedown_pool_pop(&doc->buffers_inline);
+    hoedown_pool_pop(&doc->buffers_inline, info);
 
   return i;
 }
@@ -1465,7 +1465,7 @@ static inline size_t parse_html_block(hoedown_document *doc, void *target, const
   // Try to parse various constructs with a mega-if
   const uint8_t *html_data = data + content_start;
   size_t html_size = mark - content_start;
-  hoedown_buffer *name = hoedown_pool_get(&doc->buffers_block);
+  hoedown_buffer *name = hoedown_pool_get(&doc->buffers_inline);
 
   if (
     // HTML start / end tag
@@ -1487,7 +1487,7 @@ static inline size_t parse_html_block(hoedown_document *doc, void *target, const
     // Declaration
     || parse_declaration(html_data, html_size)
   ) {
-    hoedown_pool_pop(&doc->buffers_block);
+    hoedown_pool_pop(&doc->buffers_inline, name);
     
     // Render!
     if (doc->mode == NORMAL_PARSING) {
@@ -1500,7 +1500,7 @@ static inline size_t parse_html_block(hoedown_document *doc, void *target, const
     return i;
   }
 
-  hoedown_pool_pop(&doc->buffers_block);
+  hoedown_pool_pop(&doc->buffers_inline, name);
   return 0;
 }
 
@@ -1570,7 +1570,7 @@ static inline size_t parse_link_reference(hoedown_document *doc, void *target, c
   mark = i;
   i += parse_link_spec(doc, ref, data + i, size - i);
   if (mark == i) {
-    if (ref) hoedown_pool_pop(&doc->marker_link_refs);
+    if (ref) hoedown_pool_pop(&doc->marker_link_refs, ref);
     return 0;
   }
 
@@ -1578,7 +1578,7 @@ static inline size_t parse_link_reference(hoedown_document *doc, void *target, c
   mark = i;
   i += next_line_empty(data + i, size - i);
   if (mark == i && i < size) {
-    if (ref) hoedown_pool_pop(&doc->marker_link_refs);
+    if (ref) hoedown_pool_pop(&doc->marker_link_refs, ref);
     return 0;
   }
 
@@ -1589,11 +1589,11 @@ static inline size_t parse_link_reference(hoedown_document *doc, void *target, c
     label->size = 0;
     collapse_spacing(label, data + label_start, label_end - label_start);
     ref->id = hash_string(label->data, label->size);
-    hoedown_pool_pop(&doc->buffers_inline);
+    hoedown_pool_pop(&doc->buffers_inline, label);
 
     // If another reference with same ID exists, return
     if (find_link_ref(doc, ref->id)) {
-      hoedown_pool_pop(&doc->marker_link_refs);
+      hoedown_pool_pop(&doc->marker_link_refs, ref);
       return 0;
     }
 
@@ -1736,7 +1736,7 @@ static inline size_t parse_quote_block(hoedown_document *doc, void *target, cons
     doc->rndr.quote_block(target, content, &doc->data);
   }
 
-  hoedown_pool_pop(&doc->buffers_block);
+  hoedown_pool_pop(&doc->buffers_block, work);
   return i;
 }
 
@@ -1982,8 +1982,10 @@ static inline size_t parse_list(hoedown_document *doc, void *target, const uint8
     if (current_mode != DUMB_PARSING)
       parse_block(doc, item_content, work->data, work->size, work->size, 0);
 
-    if (current_mode == NORMAL_PARSING)
+    if (current_mode == NORMAL_PARSING) {
       doc->rndr.list_item(content, item_content, is_ordered, !is_loose, &doc->data);
+      doc->rndr.object_pop(item_content, 0, &doc->data);
+    }
   }
 
   // Render the list itself
@@ -2216,11 +2218,11 @@ static size_t char_ampersand(hoedown_document *doc, void *target, const uint8_t 
     parse_string(doc, target, data + parsed, start - parsed);
 
     doc->rndr.entity(target, character, &doc->data);
-    hoedown_pool_pop(&doc->buffers_inline);
+    hoedown_pool_pop(&doc->buffers_inline, character);
     return i;
   }
 
-  hoedown_pool_pop(&doc->buffers_inline);
+  hoedown_pool_pop(&doc->buffers_inline, character);
   return 0;
 }
 
