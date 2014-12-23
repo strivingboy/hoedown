@@ -2359,10 +2359,10 @@ static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *d
 static inline void set_active_chars(char_trigger *active_chars, hoedown_features ft) {
   memset(active_chars, 0, 256 * sizeof(char_trigger *));
 
-  if (ft & (HOEDOWN_FT_ESCAPE | HOEDOWN_FT_MATH))
+  if (ft & (HOEDOWN_FT_ESCAPE | HOEDOWN_FT_MATH | HOEDOWN_FT_HARD_LINEBREAK))
     active_chars['\\'] = char_escape;
 
-  if (ft & (HOEDOWN_FT_HARD_LINEBREAK | HOEDOWN_FT_LINEBREAK | HOEDOWN_FT_SOFT_LINEBREAK))
+  if (ft & (HOEDOWN_FT_LINEBREAK | HOEDOWN_FT_SOFT_LINEBREAK))
     active_chars['\n'] = char_newline;
 
   if (ft & (HOEDOWN_FT_HTML | HOEDOWN_FT_URI_AUTOLINK | HOEDOWN_FT_EMAIL_AUTOLINK))
