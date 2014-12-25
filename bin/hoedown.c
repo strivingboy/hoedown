@@ -1,9 +1,3 @@
-#if __STDC_VERSION__ >= 199901L
-#define _XOPEN_SOURCE 600
-#else
-#define _XOPEN_SOURCE 500
-#endif /* __STDC_VERSION__ */
-
 #include "document.h"
 #include "html.h"
 
@@ -378,7 +372,7 @@ static int parse_argument(int argn, char *arg, int is_forced, void *opaque) {
 
 int main(int argc, char **argv) {
   struct option_data data;
-  struct timespec start, end;
+  clock_t t1, t2;
   FILE *file = stdin;
   hoedown_buffer *ib, *ob;
   hoedown_renderer *renderer = NULL;
@@ -438,9 +432,9 @@ int main(int argc, char **argv) {
   /* Perform Markdown rendering */
   document = hoedown_document_new(renderer, data.features, data.max_nesting);
 
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
+  t1 = clock();
   ob = hoedown_document_render(document, ib->data, ib->size, data.is_inline, NULL);
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
+  t2 = clock();
 
   /* Cleanup */
   hoedown_buffer_free(ib);
@@ -459,11 +453,16 @@ int main(int argc, char **argv) {
 
   /* Show rendering time */
   if (data.show_time) {
-    long long elapsed = (end.tv_sec - start.tv_sec)*1e9 + (end.tv_nsec - start.tv_nsec);
-    if (elapsed < 1e9)
-      fprintf(stderr, "Time spent on rendering: %.2f ms.\n", ((double)elapsed)/1e6);
+    if (t1 == -1 || t2 == -1) {
+      fprintf(stderr, "Failed to get the time.\n");
+      return 1;
+    }
+
+    double elapsed = (double)(t2 - t1) / CLOCKS_PER_SEC;
+    if (elapsed < 1)
+      fprintf(stderr, "Time spent on rendering: %7.2f ms.\n", elapsed*1e3);
     else
-      fprintf(stderr, "Time spent on rendering: %.3f s.\n", ((double)elapsed)/1e9);
+      fprintf(stderr, "Time spent on rendering: %6.3f s.\n", elapsed);
   }
 
   return 0;

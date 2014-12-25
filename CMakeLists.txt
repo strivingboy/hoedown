@@ -47,7 +47,7 @@ install(DIRECTORY src/ DESTINATION include/hoedown
 # Executables
 if (BUILD_CLI)
   add_executable(hoedown bin/hoedown.c bin/noop.c)
-  target_link_libraries(hoedown libhoedown rt)
+  target_link_libraries(hoedown libhoedown)
 
   set_target_properties(hoedown PROPERTIES COMPILE_FLAGS ${FLAGS})
   include_directories(${PROJECT_SOURCE_DIR}/src)
