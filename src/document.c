@@ -2143,7 +2143,7 @@ static inline size_t parse_any_block(hoedown_document *doc, void *target, const 
 
 
 static size_t parse_block(hoedown_document *doc, void *target, const uint8_t *data, size_t size, size_t lazy_size, hoedown_features lazy_ft) {
-  if (doc->current_nesting > doc->max_nesting) return size; //FIXME: stop all parsing here
+  if (doc->current_nesting > doc->max_nesting) return size;
   doc->current_nesting++;
 
   size_t i = 0, result, parsed = 0;
