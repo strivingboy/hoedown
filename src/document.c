@@ -593,7 +593,106 @@ static size_t parse_block(hoedown_document *doc, void *target, const uint8_t *da
 // COMMON PARSING
 // Syntax shared between block and inline constructs
 
-//TODO
+static inline size_t parse_link_destination__enclosed(hoedown_document *doc, hoedown_buffer *destination, const uint8_t *data, size_t size) {
+  size_t i = 0;
+
+  // Opening angle bracket
+  if (i < size && data[i] == '<') i++;
+  else return 0;
+
+  // Content and ending angle bracket
+  while (1) {
+    while (i < size && data[i] != '\n' && data[i] != '>' && data[i] != '<') i++;
+    if (i < size && data[i] == '>' && !is_escaped(data, i)) {
+      destination->size = 0;
+      unescape_both(doc, destination, data + 1, i - 1);
+      return i + 1;
+    }
+
+    if (i >= size || data[i] == '\n' || !is_escaped(data, i)) return 0;
+    i++;
+  }
+}
+
+static inline size_t parse_link_destination__free(hoedown_document *doc, hoedown_buffer *destination, const uint8_t *data, size_t size) {
+  size_t i = 0;
+  int inside_parentheses = 0;
+
+  while (1) {
+    while (i < size && data[i] > ' ' && data[i] != '(' && data[i] != ')') i++;
+    if (i >= size || data[i] <= ' ') break;
+
+    // Parentheses
+    if (!is_escaped(data, i)) {
+      if ((data[i] == ')') != inside_parentheses) break;
+      inside_parentheses = !inside_parentheses;
+    }
+    i++;
+  }
+
+  if (i == 0) return 0;
+  destination->size = 0;
+  unescape_both(doc, destination, data, i);
+  return i;
+}
+
+static inline size_t parse_link_destination(hoedown_document *doc, hoedown_buffer *destination, const uint8_t *data, size_t size) {
+  size_t result;
+
+  if ((result = parse_link_destination__enclosed(doc, destination, data, size)))
+    return result;
+
+  return parse_link_destination__free(doc, destination, data, size);
+}
+
+static inline size_t parse_link_title(hoedown_document *doc, hoedown_buffer *title, const uint8_t *data, size_t size) {
+  size_t i = 0;
+  uint8_t delimiter;
+
+  // Opening delimiter
+  if (size < 2) return 0;
+  delimiter = data[i];
+
+  if (delimiter == '"' || delimiter == '\'' || delimiter == '(') i++;
+  else return 0;
+
+  if (delimiter == '(') delimiter = ')';
+
+  // Content and closing delimiter
+  while (1) {
+    while (i < size && data[i] != delimiter) i++;
+    if (i < size && !is_escaped(data, i)) {
+      title->size = 0;
+      unescape_both(doc, title, data + 1, i - 1);
+      return i + 1;
+    }
+
+    if (i >= size) return 0;
+    i++;
+  }
+}
+
+static inline size_t parse_link_label(hoedown_buffer *label, const uint8_t *data, size_t size) {
+  size_t i = 0;
+
+  // Opening bracket
+  if (i < size && data[i] == '[') i++;
+  else return 0;
+
+  // Content and closing bracket
+  while (1) {
+    while (i < size && data[i] != ']' && data[i] != '[') i++;
+    if (i < size && data[i] == ']' && !is_escaped(data, i)) {
+      if (i > 1000) return 0;
+      label->size = 0;
+      collapse_spacing(label, data + 1, i - 1);
+      return i + 1;
+    }
+
+    if (i >= size || !is_escaped(data, i)) return 0;
+    i++;
+  }
+}
 
 
 // INLINE PARSING
