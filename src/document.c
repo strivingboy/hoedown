@@ -274,9 +274,9 @@ static inline int is_empty(const uint8_t *data, size_t size) {
 // but only if the current line is all spacing. Otherwise, zero is returned.
 static inline size_t next_line_empty(const uint8_t *data, size_t size) {
   size_t i = 0;
-  
+
   while (i < size && data[i] == ' ') i++;
-  
+
   if (unlikely(i >= size)) return i;
   if (data[i] == '\n') return i + 1;
   return 0;
@@ -288,7 +288,7 @@ static inline void collapse_spacing(hoedown_buffer *ob, const uint8_t *data, siz
   size_t i = 0, mark = 0;
   while (1) {
     while (i < size && !is_space(data[i])) i++;
-    
+
     // Optimization: it's a single space, we don't need to replace anything
     if (likely(i+1 < size && data[i] == ' ' && !is_space(data[i+1]))) {
       i += 2;
@@ -775,7 +775,7 @@ static inline size_t parse_email_autolink(hoedown_document *doc, void *target, c
   size_t i = start + 1, mark;//TODO
 
   // Collect username
-  
+
   return i + 1;
 }
 
@@ -1238,14 +1238,14 @@ static inline size_t parse_atx_header(hoedown_document *doc, void *target, const
   // Skip until end of line, determine end of content
   while (i < size && data[i] != '\n') i++;
   mark = content_start + parse_atx_header_end(data + content_start, i - content_start);
-  
+
   // Skip past newline
   if (i < size) i++;
 
   // Render!
   if (doc->mode == NORMAL_PARSING) {
     parse_paragraph(doc, target, data + parsed, start - parsed);
-  
+
     void *content = doc->rndr.object_get(1, &doc->data);
     parse_inline(doc, content, data + content_start, mark - content_start, 0, NULL, NULL);
     doc->rndr.atx_header(target, content, width, &doc->data);
@@ -1296,7 +1296,7 @@ static inline size_t parse_setext_header(hoedown_document *doc, void *target, co
   // Render!
   if (doc->mode == NORMAL_PARSING) {
     parse_paragraph(doc, target, data + parsed, start - parsed);
-  
+
     void *content = doc->rndr.object_get(1, &doc->data);
     parse_inline(doc, content, data + content_start, content_end - content_start, 0, NULL, NULL);
     doc->rndr.setext_header(target, content, character == '=', &doc->data);
@@ -1351,7 +1351,7 @@ static inline size_t parse_horizontal_rule(hoedown_document *doc, void *target, 
   // Render!
   if (doc->mode == NORMAL_PARSING) {
     parse_paragraph(doc, target, data + parsed, start - parsed);
-  
+
     doc->rndr.horizontal_rule(target, &doc->data);
   }
 
@@ -1367,7 +1367,7 @@ static inline size_t parse_indented_code_block(hoedown_document *doc, void *targ
   size_t last_non_empty_line = 0;
   hoedown_buffer *code = hoedown_pool_get(&doc->buffers_block);
   code->size = 0;
-  
+
   while (1) {
     // Parse initial spaces
     mark = i;
@@ -1398,7 +1398,7 @@ static inline size_t parse_indented_code_block(hoedown_document *doc, void *targ
   // Render!
   if (doc->mode == NORMAL_PARSING) {
     parse_paragraph(doc, target, data + parsed, start - parsed);
-  
+
     doc->rndr.indented_code_block(target, code, &doc->data);
   }
 
@@ -1408,7 +1408,7 @@ static inline size_t parse_indented_code_block(hoedown_document *doc, void *targ
 
 static inline size_t parse_code_fence(const uint8_t *data, size_t size, uint8_t *character, size_t *width) {
   size_t i = 0, mark;
-  
+
   // Skip three optional spaces
   if (unlikely(i + 3 > size)) return 0;
 
@@ -1437,7 +1437,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
   size_t i = start, mark;
   size_t indentation, start_width, end_width;
   uint8_t start_character, end_character;
-  
+
   // Parse initial fence
   mark = i;
   i += parse_code_fence(data + i, size - i, &start_character, &start_width);
@@ -1452,7 +1452,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
   if (unlikely(i < size && data[i] == '`')) return 0;
 
   hoedown_buffer *info = NULL;
-  
+
   if (doc->mode == NORMAL_PARSING) {
     info = hoedown_pool_get(&doc->buffers_inline);
     info->size = 0;
@@ -1500,7 +1500,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
     while (1) {
       line_start = i;
       if (i >= size) break;
-      
+
       // Advance until end of line
       while (i < size && data[i] != '\n') i++;
       if (i < size) i++;
@@ -1516,7 +1516,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
     // Render!
     if (doc->mode == NORMAL_PARSING) {
       parse_paragraph(doc, target, data + parsed, start - parsed);
-  
+
       hoedown_buffer code = {(uint8_t *)data + text_start, line_start - text_start, 0, 0, NULL, NULL};
       doc->rndr.fenced_code_block(target, &code, info->size ? info : NULL, &doc->data);
     }
@@ -1589,11 +1589,11 @@ static inline size_t parse_html_block(hoedown_document *doc, void *target, const
     || parse_declaration(html_data, html_size)
   ) {
     hoedown_pool_pop(&doc->buffers_inline, name);
-    
+
     // Render!
     if (doc->mode == NORMAL_PARSING) {
       parse_paragraph(doc, target, data + parsed, start - parsed);
-  
+
       hoedown_buffer html = {(uint8_t *)data + start, mark - start, 0, 0, NULL, NULL};
       doc->rndr.html_block(target, &html, &doc->data);
     }
@@ -1880,7 +1880,7 @@ static inline size_t parse_list_marker(const uint8_t *data, size_t size, int *is
 
 static inline size_t parse_list_prefix(const uint8_t *data, size_t size, int *is_ordered, int *number, uint8_t *character) {
   size_t i = 0, mark;
-  
+
   // Optional indentation
   while (i < size && data[i] == ' ') i++;
   if (i >= 4) return 0;
@@ -2179,7 +2179,7 @@ static inline size_t parse_any_block(hoedown_document *doc, void *target, const 
       test_html_block(data + i, size - i) &&
       (result = parse_html_block(doc, target, data, parsed, i, size)))
     return result;
-  
+
   if (doc->ft & HOEDOWN_FT_LINK && parsed == i &&
       test_link_reference(data + i, size - i) &&
       (result = parse_link_reference(doc, target, data, parsed, i, size)))
@@ -2357,10 +2357,10 @@ static size_t char_square_bracket(hoedown_document *doc, void *target, const uin
 static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *data, size_t size, uint8_t delimiter, delimiter_check check, void *opaque) {
   if (doc->current_nesting > doc->max_nesting) return size;
   doc->current_nesting++;
-  
+
   size_t i = 0, result, parsed = 0;
   char_trigger *active_chars = doc->active_chars;
-  
+
   // Save current state of the emphasis stack
   void **current_target = doc->emphasis_stack.current_target;
   doc->emphasis_stack.current_target = &target;
@@ -2446,9 +2446,9 @@ static inline void set_active_chars(char_trigger *active_chars, hoedown_features
 
 static inline void restrict_features(const hoedown_renderer *rndr, hoedown_features *ft) {
   hoedown_features not_present = 0;
-  
+
   //TODO
-  
+
   // Remove not present features from *ft
   *ft &= ~not_present;
 }
