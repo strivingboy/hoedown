@@ -2447,7 +2447,43 @@ static inline void set_active_chars(char_trigger *active_chars, hoedown_features
 static inline void restrict_features(const hoedown_renderer *rndr, hoedown_features *ft) {
   hoedown_features not_present = 0;
 
-  //TODO
+  if (!rndr->indented_code_block)
+    not_present |= HOEDOWN_FT_INDENTED_CODE_BLOCK;
+  if (!rndr->fenced_code_block)
+    not_present |= HOEDOWN_FT_FENCED_CODE_BLOCK;
+  if (!rndr->horizontal_rule)
+    not_present |= HOEDOWN_FT_HORIZONTAL_RULE;
+  if (!rndr->atx_header)
+    not_present |= HOEDOWN_FT_ATX_HEADER;
+  if (!rndr->setext_header)
+    not_present |= HOEDOWN_FT_SETEXT_HEADER;
+  if (!rndr->list || !rndr->list_item)
+    not_present |= HOEDOWN_FT_LIST;
+  if (!rndr->quote_block)
+    not_present |= HOEDOWN_FT_QUOTE_BLOCK;
+  if (!rndr->html_block)
+    not_present |= HOEDOWN_FT_HTML_BLOCK;
+
+  if (!rndr->escape)
+    not_present |= HOEDOWN_FT_ESCAPE;
+  if (!rndr->hard_linebreak)
+    not_present |= HOEDOWN_FT_HARD_LINEBREAK;
+  if (!rndr->linebreak)
+    not_present |= HOEDOWN_FT_LINEBREAK;
+  if (!rndr->uri_autolink)
+    not_present |= HOEDOWN_FT_URI_AUTOLINK;
+  if (!rndr->email_autolink)
+    not_present |= HOEDOWN_FT_EMAIL_AUTOLINK;
+  if (!rndr->html)
+    not_present |= HOEDOWN_FT_HTML;
+  if (!rndr->entity)
+    not_present |= HOEDOWN_FT_ENTITY;
+  if (!rndr->code_span)
+    not_present |= HOEDOWN_FT_CODE_SPAN;
+  if (!rndr->emphasis)
+    not_present |= HOEDOWN_FT_EMPHASIS;
+  if (!rndr->link)
+    not_present |= HOEDOWN_FT_LINK;
 
   // Remove not present features from *ft
   *ft &= ~not_present;
