@@ -1409,9 +1409,104 @@ static inline int test_link_reference(const uint8_t *data, size_t size) {
          size >= 4 && (data[3] == '[')))))));
 }
 
+static inline size_t parse_link_reference_title(hoedown_document *doc, hoedown_buffer *title, const uint8_t *data, size_t size) {
+  size_t i = 0, mark;
+
+  // Mandatory spacing, up to one newline
+  mark = i;
+  while (i < size && data[i] == ' ') i++;
+  if (i < size && data[i] == '\n') {
+    i++;
+    while (i < size && data[i] == ' ') i++;
+  }
+  if (mark == i) return 0;
+
+  // Title!
+  mark = i;
+  i += parse_link_title(doc, title, data + i, size - i);
+  if (mark == i) return 0;
+
+  return i;
+}
+
+static inline size_t parse_link_reference_content(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t size) {
+  size_t i = 0, mark;
+
+  // Optional spacing, up to one newline
+  while (i < size && data[i] == ' ') i++;
+  if (i < size && data[i] == '\n') {
+    i++;
+    while (i < size && data[i] == ' ') i++;
+  }
+
+  // Destination!
+  mark = i;
+  i += parse_link_destination(doc, ref->dest, data + i, size - i);
+  if (mark == i) return 0;
+
+  // Optional whitespace and title
+  mark = i;
+  i += parse_link_reference_title(doc, ref->title, data + i, size - i);
+  ref->has_title = (mark < i);
+
+  // Optional spaces
+  while (i < size && data[i] == ' ') i++;
+
+  return i;
+}
+
 // Marker parsing method.
 static inline size_t parse_link_reference(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  //TODO
+  size_t i = start, mark;
+  hoedown_buffer *label;
+  struct link_ref *ref;
+
+  // Skip three optional spaces
+  if (unlikely(i + 3 > size)) return 0;
+
+  if (data[i] == ' ') { i++;
+  if (data[i] == ' ') { i++;
+  if (data[i] == ' ') { i++;
+  }}}
+
+  // Link label and colon
+  label = hoedown_pool_get(&doc->buffers_inline);
+  mark = i;
+  i += parse_link_label(label, data + i, size - i);
+
+  if (i > mark && i < size && data[i] == ':') i++;
+  else {
+    hoedown_pool_pop(&doc->buffers_inline, label);
+    return 0;
+  }
+
+  // Contents (destination and title) and newline or EOF
+  ref = hoedown_pool_get(&doc->marker_link_refs);
+  mark = i;
+  i += parse_link_reference_content(doc, ref, data + i, size - i);
+
+  if (i > mark && (i >= size || data[i] == '\n')) i++;
+  else {
+    hoedown_pool_pop(&doc->buffers_inline, label);
+    hoedown_pool_pop(&doc->marker_link_refs, ref);
+    return 0;
+  }
+
+  // Store!
+  if (doc->mode == MARKER_PARSING) {
+    ref->id = hash_string(label->data, label->size);
+    hoedown_pool_pop(&doc->buffers_inline, label);
+
+    if (find_link_ref(doc, ref->id))
+      hoedown_pool_pop(&doc->marker_link_refs, ref);
+    else
+      add_link_ref(doc, ref);
+  } else if (doc->mode == NORMAL_PARSING) {
+    hoedown_pool_pop(&doc->buffers_inline, label);
+    hoedown_pool_pop(&doc->marker_link_refs, ref);
+    parse_paragraph(doc, target, data + parsed, start - parsed);
+  }
+  return i;
 }
 
 static inline size_t parse_quote_block_prefix(const uint8_t *data, size_t size) {
