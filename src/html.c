@@ -84,12 +84,12 @@ static void rndr_horizontal_rule(void *target, const hoedown_renderer_data *data
   HOEDOWN_BUFPUTSL(ob, "<hr />\n");
 }
 
-static void rndr_atx_header(void *target, void *content_, size_t level, const hoedown_renderer_data *data) {
+static void rndr_atx_header(void *target, void *content_, size_t width, const hoedown_renderer_data *data) {
   hoedown_buffer *ob = target, *content = content_;
 
-  hoedown_buffer_printf(ob, "<h%lu>", level);
+  hoedown_buffer_printf(ob, "<h%lu>", width);
   hoedown_buffer_put(ob, content->data, content->size);
-  hoedown_buffer_printf(ob, "</h%lu>\n", level);
+  hoedown_buffer_printf(ob, "</h%lu>\n", width);
 }
 
 static void rndr_setext_header(void *target, void *content_, int is_double, const hoedown_renderer_data *data) {
@@ -201,9 +201,9 @@ static void rndr_code_span(void *target, const hoedown_buffer *code, const hoedo
   HOEDOWN_BUFPUTSL(ob, "</code>");
 }
 
-static void rndr_emphasis(void *target, void *content_, size_t level, uint8_t delimiter, const hoedown_renderer_data *data) {
+static void rndr_emphasis(void *target, void *content_, size_t width, uint8_t delimiter, const hoedown_renderer_data *data) {
   hoedown_buffer *ob = target, *content = content_;
-  int strongs = level / 2, em = level % 2;
+  int strongs = width / 2, em = width % 2;
 
   for (int i = 0; i < strongs; i++)
     HOEDOWN_BUFPUTSL(ob, "<strong>");

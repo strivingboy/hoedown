@@ -7,7 +7,7 @@ static void rndr_paragraph(void *target, void *content, int is_tight, const hoed
 static void rndr_indented_code_block(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {}
 static void rndr_fenced_code_block(void *target, const hoedown_buffer *code, const hoedown_buffer *info, const hoedown_renderer_data *data) {}
 static void rndr_horizontal_rule(void *target, const hoedown_renderer_data *data) {}
-static void rndr_atx_header(void *target, void *content, size_t level, const hoedown_renderer_data *data) {}
+static void rndr_atx_header(void *target, void *content, size_t width, const hoedown_renderer_data *data) {}
 static void rndr_setext_header(void *target, void *content, int is_double, const hoedown_renderer_data *data) {}
 static void rndr_list(void *target, void *content, int is_ordered, int is_tight, int start, const hoedown_renderer_data *data) {}
 static void rndr_list_item(void *target, void *content, int is_ordered, int is_tight, const hoedown_renderer_data *data) {}
@@ -24,7 +24,7 @@ static void rndr_email_autolink(void *target, const hoedown_buffer *email, const
 static void rndr_html(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data) {}
 static void rndr_entity(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data) {}
 static void rndr_code_span(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {}
-static void rndr_emphasis(void *target, void *content, size_t level, uint8_t delimiter, const hoedown_renderer_data *data) {}
+static void rndr_emphasis(void *target, void *content, size_t width, uint8_t delimiter, const hoedown_renderer_data *data) {}
 static void rndr_link(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data) {}
 
 /* Global callbacks */

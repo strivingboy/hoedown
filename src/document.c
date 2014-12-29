@@ -78,7 +78,7 @@ struct emphasis_entry {
   size_t start;
 
   uint8_t delimiter;
-  size_t level;
+  size_t width;
 };
 
 struct emphasis_stack {
@@ -1056,7 +1056,7 @@ static inline void discard_emphasis(hoedown_document *doc, const uint8_t *data) 
   }
 
   // Merge content into target
-  parse_string(doc, target, data + entry->parsed, entry->start + entry->level - entry->parsed);
+  parse_string(doc, target, data + entry->parsed, entry->start + entry->width - entry->parsed);
   doc->rndr.object_merge(target, content, 1, &doc->data);
 
   // Replace current target
@@ -1074,21 +1074,21 @@ static inline void close_emphasis(hoedown_document *doc, const uint8_t *data) {
 
   // Render emphasis
   parse_string(doc, target, data + entry->parsed, entry->start - entry->parsed);
-  doc->rndr.emphasis(target, content, entry->level, entry->delimiter, &doc->data);
+  doc->rndr.emphasis(target, content, entry->width, entry->delimiter, &doc->data);
 
   // Replace current target
   *stack->current_target = target;
   doc->rndr.object_pop(content, 1, &doc->data);
 }
 
-static inline void close_emphasis_partial(hoedown_document *doc, const uint8_t *data, size_t level) {
+static inline void close_emphasis_partial(hoedown_document *doc, const uint8_t *data, size_t width) {
   struct emphasis_stack *stack = &doc->emphasis_stack;
   void *content = *stack->current_target;
 
   // Render internal emphasis
   struct emphasis_entry *prev = &stack->entry[stack->size-1];
   void *target = doc->rndr.object_get(1, &doc->data);
-  doc->rndr.emphasis(target, content, level, prev->delimiter, &doc->data);
+  doc->rndr.emphasis(target, content, width, prev->delimiter, &doc->data);
 
   // Move current entry to the next slot
   struct emphasis_entry *next = &stack->entry[stack->size++];
@@ -1099,7 +1099,7 @@ static inline void close_emphasis_partial(hoedown_document *doc, const uint8_t *
   prev->delimiter = 0;
 
   // Set next slot to the remaining emphasis and replace current target
-  next->level -= level;
+  next->width -= width;
   *stack->current_target = target;
 }
 
@@ -1135,16 +1135,16 @@ static inline size_t parse_emphasis(hoedown_document *doc, void *target, const u
 
       // Close emphasis!
       parse_string(doc, *stack->current_target, data + parsed, mark - parsed);
-      size_t level = stack->entry[e-1].level;
-      if (level > i - mark && stack->size < stack->max_size) {
-        level = i - mark;
-        close_emphasis_partial(doc, data, level);
+      size_t width = stack->entry[e-1].width;
+      if (width > i - mark && stack->size < stack->max_size) {
+        width = i - mark;
+        close_emphasis_partial(doc, data, width);
       } else {
         close_emphasis(doc, data);
       }
 
       // Update positions as appropiate
-      mark += level;
+      mark += width;
       parsed = mark;
       if (mark >= i) return i;
     }
@@ -1157,7 +1157,7 @@ static inline size_t parse_emphasis(hoedown_document *doc, void *target, const u
     entry->parsed = parsed;
     entry->start = mark;
     entry->delimiter = delimiter;
-    entry->level = i - mark;
+    entry->width = i - mark;
 
     *stack->current_target = doc->rndr.object_get(1, &doc->data);
     return i;
@@ -1215,7 +1215,7 @@ static inline size_t parse_atx_header_end(const uint8_t *data, size_t size) {
 
 static inline size_t parse_atx_header(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark, content_start;
-  size_t level;
+  size_t width;
 
   // Initial spaces
   mark = i;
@@ -1225,8 +1225,8 @@ static inline size_t parse_atx_header(hoedown_document *doc, void *target, const
   // Hashes
   mark = i;
   while (i < size && data[i] == '#') i++;
-  level = i - mark;
-  if (level == 0 || level > 6) return 0;
+  width = i - mark;
+  if (width == 0 || width > 6) return 0;
 
   // Mandatory spaces
   mark = i;
@@ -1248,7 +1248,7 @@ static inline size_t parse_atx_header(hoedown_document *doc, void *target, const
   
     void *content = doc->rndr.object_get(1, &doc->data);
     parse_inline(doc, content, data + content_start, mark - content_start, 0, NULL, NULL);
-    doc->rndr.atx_header(target, content, level, &doc->data);
+    doc->rndr.atx_header(target, content, width, &doc->data);
     doc->rndr.object_pop(content, 1, &doc->data);
   }
 

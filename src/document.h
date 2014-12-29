@@ -181,7 +181,7 @@ typedef struct hoedown_renderer {
   void (*indented_code_block)(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data);
   void (*fenced_code_block)(void *target, const hoedown_buffer *code, const hoedown_buffer *info, const hoedown_renderer_data *data);
   void (*horizontal_rule)(void *target, const hoedown_renderer_data *data);
-  void (*atx_header)(void *target, void *content, size_t level, const hoedown_renderer_data *data);
+  void (*atx_header)(void *target, void *content, size_t width, const hoedown_renderer_data *data);
   void (*setext_header)(void *target, void *content, int is_double, const hoedown_renderer_data *data);
   void (*list)(void *target, void *content, int is_ordered, int is_tight, int start, const hoedown_renderer_data *data);
   void (*list_item)(void *target, void *content, int is_ordered, int is_tight, const hoedown_renderer_data *data);
@@ -198,7 +198,7 @@ typedef struct hoedown_renderer {
   void (*html)(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data);
   void (*entity)(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data);
   void (*code_span)(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data);
-  void (*emphasis)(void *target, void *content, size_t level, uint8_t delimiter, const hoedown_renderer_data *data);
+  void (*emphasis)(void *target, void *content, size_t width, uint8_t delimiter, const hoedown_renderer_data *data);
   void (*link)(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data);
 
   /* Global callbacks (mandatory) */
