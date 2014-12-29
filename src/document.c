@@ -111,7 +111,7 @@ struct hoedown_document {
   // for inline parsing
   char_trigger active_chars[256];
   struct emphasis_stack emphasis_stack;
-  int inside_link;
+  int contains_link;
 
   // for marker parsing
   hoedown_pool marker_link_refs;
@@ -146,7 +146,6 @@ hoedown_document *hoedown_document_new(
   doc->emphasis_stack.initial_size = 0;
   doc->emphasis_stack.max_size = max_nesting;
   doc->emphasis_stack.entry = hoedown_calloc(max_nesting, sizeof(struct emphasis_entry));
-  doc->inside_link = 0;
 
   //FIXME: this needs limiting
   hoedown_pool_init(&doc->marker_link_refs, 4, new_link_ref, free_link_ref, NULL);
@@ -780,7 +779,211 @@ static inline size_t parse_email_autolink(hoedown_document *doc, void *target, c
   return i + 1;
 }
 
-//TODO
+static inline size_t parse_link_spec__inline_title(hoedown_document *doc, hoedown_buffer *title, const uint8_t *data, size_t size) {
+  size_t i = 0, mark;
+
+  // Mandatory spacing
+  mark = i;
+  while (i < size && is_space(data[i])) i++;
+  if (mark == i) return 0;
+
+  // Mandatory title
+  mark = i;
+  i += parse_link_title(doc, title, data + i, size - i);
+  if (mark == i) return 0;
+
+  return i;
+}
+
+static inline size_t parse_link_spec__inline(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+  size_t i = start, mark;
+
+  // Left parenthesis
+  if (i < size && data[i] == '(') i++;
+  else return 0;
+
+  // Optional spacing
+  while (i < size && is_space(data[i])) i++;
+
+  // Optional destination
+  ref->dest->size = 0;
+  i += parse_link_destination(doc, ref->dest, data + i, size - i);
+
+  // Optional spacing and title
+  mark = i;
+  i += parse_link_spec__inline_title(doc, ref->title, data + i, size - i);
+  ref->has_title = (mark < i);
+
+  // Optional spacing
+  while (i < size && is_space(data[i])) i++;
+
+  // Right parenthesis
+  if (i < size && data[i] == ')') i++;
+  else return 0;
+
+  ref->id = 1;
+  return i;
+}
+
+static inline size_t parse_link_spec__collapsed(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+  size_t i = start;
+
+  // Optional spacing
+  while (i < size && is_space(data[i])) i++;
+
+  // Brackets
+  if (i+1 < size && data[i] == '[' && data[i+1] == ']') i += 2;
+  else return 0;
+
+  // This is a collapsed link, try to match link text
+  hoedown_buffer *label = hoedown_pool_get(&doc->buffers_inline);
+  label->size = 0;
+  collapse_spacing(label, data + text_start, text_end - text_start);
+  ref->id = hash_string(label->data, label->size);
+  hoedown_pool_pop(&doc->buffers_inline, label);
+
+  struct link_ref *oref = find_link_ref(doc, ref->id);
+  if (oref) {
+    hoedown_buffer_set(ref->dest, oref->dest->data, oref->dest->size);
+    ref->has_title = oref->has_title;
+    if (ref->has_title)
+      hoedown_buffer_set(ref->title, oref->title->data, oref->title->size);
+  } else {
+    // Indicate we couldn't match
+    ref->id = 0;
+  }
+
+  return i;
+}
+
+static inline size_t parse_link_spec__full(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+  size_t i = start, mark;
+
+  // Optional spacing
+  while (i < size && is_space(data[i])) i++;
+
+  // Label
+  hoedown_buffer *label = hoedown_pool_get(&doc->buffers_inline);
+  mark = i;
+  i += parse_link_label(label, data + i, size - i);
+
+  if (mark == i) {
+    hoedown_pool_pop(&doc->buffers_inline, label);
+    return 0;
+  }
+
+  // This is a reference link, try to match label
+  ref->id = hash_string(label->data, label->size);
+  hoedown_pool_pop(&doc->buffers_inline, label);
+
+  struct link_ref *oref = find_link_ref(doc, ref->id);
+  if (oref) {
+    hoedown_buffer_set(ref->dest, oref->dest->data, oref->dest->size);
+    ref->has_title = oref->has_title;
+    if (ref->has_title)
+      hoedown_buffer_set(ref->title, oref->title->data, oref->title->size);
+  } else {
+    // Indicate we couldn't match
+    ref->id = 0;
+  }
+
+  return i;
+}
+
+static inline size_t parse_link_spec(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+  size_t result;
+
+  // Try to match different spec types
+  if ((result = parse_link_spec__inline(doc, ref, data, start, size, text_start, text_end)))
+    return result;
+  if ((result = parse_link_spec__collapsed(doc, ref, data, start, size, text_start, text_end)))
+    return result;
+  if ((result = parse_link_spec__full(doc, ref, data, start, size, text_start, text_end)))
+    return result;
+
+  // This is a shortcut link, try to match link text
+  hoedown_buffer *label = hoedown_pool_get(&doc->buffers_inline);
+  label->size = 0;
+  collapse_spacing(label, data + text_start, text_end - text_start);
+  ref->id = hash_string(label->data, label->size);
+  hoedown_pool_pop(&doc->buffers_inline, label);
+
+  struct link_ref *oref = find_link_ref(doc, ref->id);
+  if (oref) {
+    hoedown_buffer_set(ref->dest, oref->dest->data, oref->dest->size);
+    ref->has_title = oref->has_title;
+    if (ref->has_title)
+      hoedown_buffer_set(ref->title, oref->title->data, oref->title->size);
+  } else {
+    // Indicate we couldn't match
+    ref->id = 0;
+  }
+
+  return start;
+}
+
+// Called from parse_brackets to parse the rest of the (possible) link
+// data[start] is assumed to be ']'
+static inline size_t parse_link(hoedown_document *doc, void *target, void *content, const uint8_t *data, size_t parsed, size_t start, size_t size, int is_image, size_t text_start, size_t text_end) {
+  size_t i = text_end + 1;
+  struct link_ref *ref = hoedown_pool_get(&doc->marker_link_refs);
+
+  // Parse a link spec
+  i = parse_link_spec(doc, ref, data, i, size, text_start, text_end);
+  if (!ref->id) {
+    hoedown_pool_pop(&doc->marker_link_refs, ref);
+    return 0;
+  }
+
+  // Render!
+  parse_string(doc, target, data + parsed, start - parsed);
+  doc->rndr.link(target, content, ref->dest, ref->has_title ? ref->title : NULL, is_image, &doc->data);
+  doc->rndr.object_pop(content, 1, &doc->data);
+  if (!is_image) doc->contains_link = 1;
+  return i;
+}
+
+// data[start] is assumed to be '['
+static inline size_t parse_brackets(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t i = start, result, text_start;
+  int is_image = 0;
+
+  // Is this an image link?
+  if (start > parsed && data[start-1] == '!' && doc->ft & HOEDOWN_FT_LINK_IMAGE) {
+    is_image = 1;
+    start--;
+  }
+
+  // Parse link text
+  void *content = doc->rndr.object_get(1, &doc->data);
+  i++;
+  text_start = i;
+
+  doc->contains_link = 0;
+  i += parse_inline(doc, content, data + i, size - i, ']', NULL, NULL);
+
+  if (i >= size) {
+    // Delimiter not found
+    doc->rndr.object_pop(content, 1, &doc->data);
+    return 0;
+  }
+
+  // Try to parse rest of the link
+  result = 0;
+  if (!doc->contains_link || is_image)
+    result = parse_link(doc, target, content, data, parsed, start, size, is_image, text_start, i);
+
+  if (result == 0) {
+    doc->rndr.object_pop(content, 1, &doc->data);
+    // This is not a link, so just bind the [] and return
+    parse_string(doc, target, data + parsed, text_start - parsed);
+    parse_inline(doc, target, data + text_start, i - text_start, 0, NULL, NULL);
+    parse_string(doc, target, (const uint8_t *)"]", 1);
+    return i + 1;
+  }
+
+  return result;
+}
 
 // data[0] is assumed to be '<'
 static inline size_t parse_cdata(const uint8_t *data, size_t size) {
@@ -2147,7 +2350,7 @@ static size_t char_underscore(hoedown_document *doc, void *target, const uint8_t
 }
 
 static size_t char_square_bracket(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  return parse_link(doc, target, data, parsed, start, size);
+  return parse_brackets(doc, target, data, parsed, start, size);
 }
 
 
