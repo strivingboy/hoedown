@@ -14,6 +14,9 @@ add_custom_target(_html_blocks.c
 add_custom_target(_autolink_schemes.c
   gperf -L ANSI-C -N hoedown_find_autolink_scheme -l -c -C -E -S 1 --ignore-case -m100 data/autolink_schemes.gperf > src/_autolink_schemes.c
 )
+add_custom_target(_case_folding.h
+  gperf -L ANSI-C -N find_case_mapping -l -c -C -E -S 1 -t -m100 data/case_folding.gperf > src/_case_folding.h
+)
 
 
 # Library
