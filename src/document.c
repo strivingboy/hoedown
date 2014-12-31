@@ -6,6 +6,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include "_case_folding.h"
+
 
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
@@ -356,13 +358,41 @@ static inline void unescape_both(hoedown_document *doc, hoedown_buffer *ob, cons
 //
 // Miscellaneous logic used when parsing.
 
+static inline size_t normalize_case_next(struct case_mapping *mapping, const uint8_t *data, size_t size) {
+  size_t i = 1;
+
+  // Collect continuation characters
+  while (i < size && (data[i] & 0xc0) == 0x80) i++;
+
+  // Lookup case mapping, return original data if not found
+  const struct case_mapping *omapping = find_case_mapping((const char *)data, i);
+  if (omapping == NULL) {
+    mapping->value = (const char *)data;
+    mapping->length = i;
+  } else {
+    mapping->value = omapping->value;
+    mapping->length = omapping->length;
+  }
+
+  return i;
+}
+
 static inline unsigned int hash_string(const uint8_t *data, size_t size) {
   unsigned int hash = 0;
+  size_t i = 0;
+  struct case_mapping mapping;
 
-  for (size_t i = 0; i < size; i++) {
+  while (i < size) {
     uint8_t c = data[i];
-    if (c >= 'A' && c <= 'Z') c += 0x20;
-    hash = c + (hash << 6) + (hash << 16) - hash;
+    if (c >= 0xc0) {
+      i += normalize_case_next(&mapping, data + i, size - i);
+      for (size_t e = 0; e < mapping.length; e++)
+        hash = mapping.value[e] + (hash << 6) + (hash << 16) - hash;
+    } else {
+      if (c >= 'A' && c <= 'Z') c += 0x20;
+      hash = c + (hash << 6) + (hash << 16) - hash;
+      i++;
+    }
   }
 
   return hash;
