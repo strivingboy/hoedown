@@ -443,8 +443,10 @@ int main(int argc, char **argv) {
   renderer_free(renderer);
 
   /* Write the result to stdout */
-  (void)fwrite(ob->data, 1, ob->size, stdout);
-  hoedown_buffer_free(ob);
+  if (ob) {
+    (void)fwrite(ob->data, 1, ob->size, stdout);
+    hoedown_buffer_free(ob);
+  }
 
   if (ferror(stdout)) {
     fprintf(stderr, "I/O errors found while writing output.\n");
