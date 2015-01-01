@@ -778,15 +778,26 @@ static inline size_t parse_code_span(hoedown_document *doc, void *target, const 
   return i;
 }
 
+static inline size_t parse_uri_scheme(const uint8_t *data, size_t size) {
+  size_t i = 0;
+
+  if (size >= 30) size = 30;
+  while (i < size && data[i] != ':') i++;
+
+  if (i < size && hoedown_find_autolink_scheme((const char *)data, i)) i++;
+  else return 0;
+
+  return i;
+}
+
 // data[0] is assumed to be '<'
 static inline size_t parse_uri_autolink(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start + 1, mark;
 
   // Collect scheme
   mark = i;
-  while (i < size && data[i] != ':') i++;
-  if (i < size && hoedown_find_autolink_scheme((const char *)data + mark, i - mark)) i++;
-  else return 0;
+  i += parse_uri_scheme(data + i, size - i);
+  if (mark == i) return 0;
 
   // Rest of URL
   while (i < size && data[i] > ' ' && data[i] != '>' && data[i] != '<') i++;
