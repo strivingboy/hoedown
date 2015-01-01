@@ -1,6 +1,9 @@
 Hoedown
 =======
 
+> **Important:** this is the upcoming Hoedown v4 codebase, and is in pre-alpha!
+> Don't use it for production yet, get one of the stable 3.x [releases](https://github.com/hoedown/hoedown/tags) instead.  
+
 [![Build Status](https://travis-ci.org/hoedown/hoedown.png?branch=master)](https://travis-ci.org/hoedown/hoedown)
 
 `Hoedown` is a revived fork of [Sundown](https://github.com/vmg/sundown),
