@@ -1889,6 +1889,240 @@ static inline size_t parse_quote_block(hoedown_document *doc, void *target, cons
   return i;
 }
 
+static inline size_t parse_list_marker(const uint8_t *data, size_t size, int *is_ordered, int *number, uint8_t *character) {
+  if (size < 1) return 0;
+
+  if (data[0] == '-' || data[0] == '*' || data[0] == '+') {
+    *is_ordered = 0;
+    *character = data[0];
+
+    if (1 < size && !is_space(data[1])) return 0;
+    return 1;
+  }
+
+  if (is_digit_ascii(data[0])) {
+    size_t i = 1;
+    while (i < size && is_digit_ascii(data[i])) i++;
+
+    if (i < size && (data[i] == '.' || data[i] == ')')) {
+      // Parse the integer
+      if (number) {
+        *number = 0;
+        for (size_t a = 0; a < i; a++)
+          *number = (*number * 10) + (data[a] - '0');
+      }
+
+      *is_ordered = 1;
+      *character = data[i];
+
+      i++;
+      if (i < size && !is_space(data[i])) return 0;
+      return i;
+    }
+  }
+
+  return 0;
+}
+
+static size_t collect_list_items__lines(hoedown_document *doc, const uint8_t *data, size_t size, int is_ordered, uint8_t character, size_t indentation, int *is_loose, hoedown_buffer *work, size_t *marker_result, size_t parsed) {
+  size_t i = 0, mark = 0, result, last_position = 0, last_size = work->size;
+  int double_empty = 0, is_ordered2;
+  uint8_t character2;
+
+  while (i < size) {
+    mark = i;
+    while (i < size && data[i] == ' ') i++;
+
+    if (i >= size || data[i] == '\n') {
+      // EMPTY LINE
+      if (last_position < mark) double_empty = 1;
+      if (i < size) i++;
+      hoedown_buffer_put(work, data + mark, i - mark);
+      continue;
+    }
+
+    if (i - mark < indentation && i - mark < 4 &&
+        (*marker_result = parse_list_marker(data + i, size - i, &is_ordered2, NULL, &character2))) {
+      // PREFIXED LINE
+      if (is_ordered2 == is_ordered && character2 == character &&
+          !parse_horizontal_rule(doc, NULL, data, i, i, size))
+        *marker_result += i - mark;
+      else
+        *marker_result = 0;
+      break;
+    }
+
+    if (i - mark >= indentation) {
+      // INDENTED LINE
+      mark += indentation;
+      if (mark > i) mark = i;
+      while (i < size && data[i] != '\n') i++;
+      if (i < size) i++;
+      hoedown_buffer_put(work, data + mark, i - mark);
+
+      if ((!*is_loose && last_size + (i - mark) < work->size) || double_empty) {
+        // We check if this line and the empty lines before belong to a fenced
+        // code block, this determines if the list can continue or it's loose
+        result = parse_block(doc, NULL, work->data + parsed, last_size - parsed, work->size - parsed, HOEDOWN_FT_FENCED_CODE_BLOCK | HOEDOWN_FT_LIST);
+        if (double_empty && result < work->size - parsed) break;
+        if (result <= last_size - parsed) *is_loose = 1;
+      }
+
+      last_position = i;
+      last_size = work->size;
+      double_empty = 0;
+      continue;
+    }
+
+    // LAZY LINE
+    if (last_position < mark) break;
+
+    mark = i;
+    while (i < size && data[i] != '\n') i++;
+    if (i < size) i++;
+    hoedown_buffer_put(work, data + mark, i - mark);
+
+    result = parse_block(doc, NULL, work->data + parsed, last_size - parsed, work->size - parsed, HOEDOWN_FT_LIST | HOEDOWN_FT_QUOTE_BLOCK);
+    if (result == last_size - parsed) break;
+    if (result < last_size - parsed && parse_any_block(doc, NULL, work->data, parsed, last_size, work->size, work->size, 0)) break;
+    last_position = i;
+    last_size = work->size;
+    double_empty = 0;
+  }
+
+
+  if (*marker_result && last_position < mark) {
+    // Before return, check if the empty lines end the list or make it loose.
+    if (double_empty) {
+      result = parse_block(doc, NULL, work->data + parsed, last_size - parsed, work->size - parsed, HOEDOWN_FT_FENCED_CODE_BLOCK | HOEDOWN_FT_LIST);
+      if (result < work->size - parsed) *marker_result = 0;
+    } else *is_loose = 1;
+  }
+
+  work->size = last_size;
+  return (*marker_result) ? mark : last_position;
+}
+
+// **Important:** This assumes it's being called with DUMB_PARSING mode set.
+//
+// List parsing works as follows: `collect_list_items` and its associate
+// functions verify at least one valid list item, and advance through all
+// subsequent items of the same type, collecting and concatenating their
+// contents into the `work` buffer. At the same time, it saves the offsets
+// at which every item's contents ends in a second buffer, `slices`.
+//
+// Here is where most of the magic happens; lines are tested for lazyness,
+// double empty lines are resolved, etc. As always, if the function returns
+// zero it means no list is started at this position in the input,
+// otherwise the end of the list is returned.
+static size_t collect_list_items(hoedown_document *doc, const uint8_t *data, size_t size, int *is_ordered, int *is_loose, int *number, hoedown_buffer *work, hoedown_buffer *slices) {
+  uint8_t character;
+  size_t i = 0, mark, result, indentation, parsed;
+
+  // Parse first line marker
+  while (i < size && data[i] == ' ') i++;
+  if (i > 3) return 0;
+  result = parse_list_marker(data + i, size - i, is_ordered, number, &character);
+  if (!result) return 0;
+  result += i;
+  i = 0;
+
+  while (i < size && result) {
+    // Start new item!
+    parsed = work->size;
+    i += result;
+
+    mark = i;
+    while (i < size && data[i] == ' ') i++;
+    if (i - mark >= 5) i = mark + 1;
+
+    indentation = result + (i - mark);
+    if (i == mark) indentation++;
+
+    mark = i;
+    while (i < size && data[i] != '\n') i++;
+    if (i < size) i++;
+    hoedown_buffer_put(work, data + mark, i - mark);
+
+    // Collect rest of the lines
+    result = 0;
+    i += collect_list_items__lines(doc, data + i, size - i, *is_ordered, character, indentation, is_loose, work, &result, parsed);
+
+    // End the list item
+    hoedown_buffer_put(slices, (const uint8_t *)&work->size, sizeof(size_t));
+    hoedown_buffer_put(slices, (const uint8_t *)&i, sizeof(size_t));
+  }
+
+  return i;
+}
+
+// This is the main entry point for list parsing. It uses `collect_list_items`
+// above to parse the list items and collect their contents, and then iterates
+// through `work` and `slices` and renders each individual item, then the list
+// itself.
+static inline size_t parse_list(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t i = start, slice, current_is_tight = doc->is_tight;
+  enum parsing_mode current_mode = doc->mode;
+  int is_ordered, is_loose = (current_mode == NORMAL_PARSING) ? 0 : 1, number = 0;
+  void *content;
+
+  hoedown_buffer *work = hoedown_pool_get(&doc->buffers_block);
+  hoedown_buffer *slices = hoedown_pool_get(&doc->buffers_inline);
+  work->size = slices->size = 0;
+
+  // 1. Collect list items
+  doc->mode = DUMB_PARSING;
+  i += collect_list_items(doc, data + i, size - i, &is_ordered, &is_loose, &number, work, slices);
+  doc->mode = current_mode;
+
+  if (i == start) {
+    hoedown_pool_pop(&doc->buffers_inline, slices);
+    hoedown_pool_pop(&doc->buffers_block, work);
+    return 0;
+  }
+
+  if (current_mode == DUMB_PARSING) {
+    hoedown_pool_pop(&doc->buffers_inline, slices);
+    hoedown_pool_pop(&doc->buffers_block, work);
+    return i;
+  }
+
+
+  // 2. Parse / render list items
+  if (current_mode == NORMAL_PARSING)
+    content = doc->rndr.object_get(0, &doc->data);
+  if (!is_loose)
+    doc->is_tight = doc->current_nesting + 1;
+
+  work->size = 0;
+  for (slice = 0; slice < slices->size; slice += 2*sizeof(size_t)) {
+    size_t offset = *((size_t *) &slices->data[slice]);
+    if (current_mode == NORMAL_PARSING) {
+      void *item_content = doc->rndr.object_get(0, &doc->data);
+      parse_block(doc, item_content, work->data + work->size, offset - work->size, offset - work->size, 0);
+      doc->rndr.list_item(content, item_content, is_ordered, !is_loose, &doc->data);
+      doc->rndr.object_pop(item_content, 0, &doc->data);
+    } else {
+      parse_block(doc, NULL, work->data + work->size, offset - work->size, offset - work->size, 0);
+    }
+    work->size = offset;
+  }
+
+  doc->is_tight = current_is_tight;
+
+
+  // 3. Render the list itself
+  if (current_mode == NORMAL_PARSING) {
+    parse_paragraph(doc, target, data + parsed, start - parsed);
+    doc->rndr.list(target, content, is_ordered, !is_loose, number, &doc->data);
+    doc->rndr.object_pop(content, 0, &doc->data);
+  }
+
+  hoedown_pool_pop(&doc->buffers_inline, slices);
+  hoedown_pool_pop(&doc->buffers_block, work);
+  return i;
+}
+
 
 
 // BLOCK PARSING
