@@ -74,6 +74,8 @@ static struct feature_info features_info[] = {
   {HOEDOWN_FT_QUOTE, "quote", "Parse quote-delimited spans."},
   {HOEDOWN_FT_STRIKETHROUGH, "strikethrough", "Parse strikethrough spans."},
   {HOEDOWN_FT_HIGHLIGHT, "highlight", "Parse highlight spans."},
+  {HOEDOWN_FT_SIDENOTE, "sidenote", "Parse Pandoc-style inline footnotes."},
+  {HOEDOWN_FT_EMOJI, "emoji", "Parse emoji codes between colons."},
 
   {HOEDOWN_FT_PREPROCESS, "preprocess", "Preprocess the input. Hoedown can give bad results if input is not preprocessed."},
 

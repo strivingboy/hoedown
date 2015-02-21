@@ -46,6 +46,8 @@ extern "C" {
 #define HOEDOWN_FT_QUOTE (1l << 24)
 #define HOEDOWN_FT_STRIKETHROUGH (1l << 25)
 #define HOEDOWN_FT_HIGHLIGHT (1l << 26)
+#define HOEDOWN_FT_SIDENOTE (1l << 32)
+#define HOEDOWN_FT_EMOJI (1l << 33)
 
 /* Other features */
 #define HOEDOWN_FT_PREPROCESS (1l << 62)
@@ -90,6 +92,8 @@ extern "C" {
   HOEDOWN_FT_QUOTE |\
   HOEDOWN_FT_STRIKETHROUGH |\
   HOEDOWN_FT_HIGHLIGHT |\
+  HOEDOWN_FT_SIDENOTE |\
+  HOEDOWN_FT_EMOJI |\
 0)
 
 #define HOEDOWN_FT_OTHER (\
