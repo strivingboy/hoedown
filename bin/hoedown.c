@@ -408,13 +408,9 @@ int main(int argc, char **argv) {
   /* Read everything */
   ib = hoedown_buffer_new(data.iunit);
 
-  while (!feof(file)) {
-    if (ferror(file)) {
-      fprintf(stderr, "I/O errors found while reading input.\n");
-      return 5;
-    }
-    hoedown_buffer_grow(ib, ib->size + data.iunit);
-    ib->size += fread(ib->data + ib->size, 1, data.iunit, file);
+  if (hoedown_buffer_putf(ib, file)) {
+    fprintf(stderr, "I/O errors found while reading input.\n");
+    return 5;
   }
 
   if (file != stdin) fclose(file);

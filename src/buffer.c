@@ -84,6 +84,17 @@ void hoedown_buffer_putc(hoedown_buffer *buf, uint8_t c) {
   buf->size += 1;
 }
 
+int hoedown_buffer_putf(hoedown_buffer *buf, FILE* file) {
+  assert(buf && buf->unit);
+
+  while (!(feof(file) || ferror(file))) {
+    hoedown_buffer_grow(buf, buf->size + buf->unit);
+    buf->size += fread(buf->data + buf->size, 1, buf->unit, file);
+  }
+
+  return ferror(file);
+}
+
 void hoedown_buffer_set(hoedown_buffer *buf, const uint8_t *data, size_t size) {
   assert(buf && buf->unit);
 

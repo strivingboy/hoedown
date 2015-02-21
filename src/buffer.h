@@ -88,6 +88,9 @@ void hoedown_buffer_puts(hoedown_buffer *buf, const char *str);
 /* hoedown_buffer_putc: append a single char to a buffer */
 void hoedown_buffer_putc(hoedown_buffer *buf, uint8_t c);
 
+/* hoedown_buffer_putf: read from a file and append to a buffer, until EOF or error */
+int hoedown_buffer_putf(hoedown_buffer *buf, FILE* file);
+
 /* hoedown_buffer_set: replace the buffer's contents with raw data */
 void hoedown_buffer_set(hoedown_buffer *buf, const uint8_t *data, size_t size);
 
