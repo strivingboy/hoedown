@@ -28,6 +28,7 @@ extern "C" {
 #define HOEDOWN_FT_QUOTE_BLOCK (1l << 31)
 #define HOEDOWN_FT_HTML_BLOCK (1l << 6)
 #define HOEDOWN_FT_TABLE (1l << 7)
+#define HOEDOWN_FT_FOOTNOTE (1l << 27)
 
 /* Inline constructs */
 #define HOEDOWN_FT_ROLE (1l << 9)
@@ -45,7 +46,6 @@ extern "C" {
 #define HOEDOWN_FT_QUOTE (1l << 24)
 #define HOEDOWN_FT_STRIKETHROUGH (1l << 25)
 #define HOEDOWN_FT_HIGHLIGHT (1l << 26)
-#define HOEDOWN_FT_FOOTNOTE (1l << 27)
 
 /* Other features */
 #define HOEDOWN_FT_PREPROCESS (1l << 62)
@@ -71,6 +71,7 @@ extern "C" {
   HOEDOWN_FT_QUOTE_BLOCK |\
   HOEDOWN_FT_HTML_BLOCK |\
   HOEDOWN_FT_TABLE |\
+  HOEDOWN_FT_FOOTNOTE |\
 0)
 
 #define HOEDOWN_FT_INLINE (\
@@ -89,7 +90,6 @@ extern "C" {
   HOEDOWN_FT_QUOTE |\
   HOEDOWN_FT_STRIKETHROUGH |\
   HOEDOWN_FT_HIGHLIGHT |\
-  HOEDOWN_FT_FOOTNOTE |\
 0)
 
 #define HOEDOWN_FT_OTHER (\

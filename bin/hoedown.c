@@ -57,6 +57,7 @@ static struct feature_info features_info[] = {
   {HOEDOWN_FT_QUOTE_BLOCK, "quote-block", "Parse email-style quote blocks."},
   {HOEDOWN_FT_HTML_BLOCK, "html-block", "Parse raw HTML blocks."},
   {HOEDOWN_FT_TABLE, "table", "Parse Kramdown style tables."},
+  {HOEDOWN_FT_FOOTNOTE, "footnote", "Parse Pandoc-style footnotes and footnote references."},
 
   {HOEDOWN_FT_ROLE, "role", "Parse generic role syntax."},
   {HOEDOWN_FT_ESCAPE, "escape", "Parse backslash escapes."},
@@ -73,7 +74,6 @@ static struct feature_info features_info[] = {
   {HOEDOWN_FT_QUOTE, "quote", "Parse quote-delimited spans."},
   {HOEDOWN_FT_STRIKETHROUGH, "strikethrough", "Parse strikethrough spans."},
   {HOEDOWN_FT_HIGHLIGHT, "highlight", "Parse highlight spans."},
-  {HOEDOWN_FT_FOOTNOTE, "footnote", "Parse footnotes and footnote references."},
 
   {HOEDOWN_FT_PREPROCESS, "preprocess", "Preprocess the input. Hoedown can give bad results if input is not preprocessed."},
 
