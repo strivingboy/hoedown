@@ -21,6 +21,7 @@ void hoedown_buffer_init(
 }
 
 void hoedown_buffer_uninit(hoedown_buffer *buf) {
+  assert(buf && buf->unit);
   buf->data_free(buf->data);
 }
 
@@ -107,8 +108,6 @@ int hoedown_buffer_eqs(const hoedown_buffer *buf, const char *str) {
 }
 
 int hoedown_buffer_prefix(const hoedown_buffer *buf, const char *prefix) {
-  assert(buf && buf->unit);
-
   for (size_t i = 0; i < buf->size; ++i) {
     if (prefix[i] == 0)
       return 0;
