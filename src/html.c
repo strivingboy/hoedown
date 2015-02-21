@@ -192,7 +192,7 @@ static void rndr_entity(void *target, const hoedown_buffer *character, const hoe
   hoedown_escape_character(ob, character->data, character->size);
 }
 
-static void rndr_code_span(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {
+static void rndr_code(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {
   hoedown_buffer *ob = target;
 
   HOEDOWN_BUFPUTSL(ob, "<code>");
@@ -275,7 +275,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
     rndr_email_autolink,
     rndr_html,
     rndr_entity,
-    rndr_code_span,
+    rndr_code,
     rndr_emphasis,
     rndr_link,
 

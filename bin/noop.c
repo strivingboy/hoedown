@@ -22,7 +22,7 @@ static void rndr_uri_autolink(void *target, const hoedown_buffer *uri, const hoe
 static void rndr_email_autolink(void *target, const hoedown_buffer *email, const hoedown_renderer_data *data) {}
 static void rndr_html(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data) {}
 static void rndr_entity(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data) {}
-static void rndr_code_span(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {}
+static void rndr_code(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {}
 static void rndr_emphasis(void *target, void *content, size_t width, uint8_t delimiter, const hoedown_renderer_data *data) {}
 static void rndr_link(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data) {}
 
@@ -58,7 +58,7 @@ hoedown_renderer *hoedown_noop_renderer_new() {
     rndr_email_autolink,
     rndr_html,
     rndr_entity,
-    rndr_code_span,
+    rndr_code,
     rndr_emphasis,
     rndr_link,
 

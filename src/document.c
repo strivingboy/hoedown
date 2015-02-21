@@ -773,8 +773,8 @@ static size_t html_parse_comment(const uint8_t *data, size_t size) {
 //     `code` [link]()
 //
 // The first character is a backtick. It'll look up the char trigger associated
-// with that character, which is `parse_code_span`. Thus, it'll call
-// `parse_code_span` with the parameters:
+// with that character, which is `parse_code`. Thus, it'll call
+// `parse_code` with the parameters:
 //
 //     doc:      <the doc>
 //     target:   <some target>
@@ -783,8 +783,8 @@ static size_t html_parse_comment(const uint8_t *data, size_t size) {
 //     start:    0
 //     size:     20
 //
-// There's a valid codespan in that position, so `parse_code_span` will
-// call the renderer's `code_span` callback to render it and happily
+// There's a valid codespan in that position, so `parse_code` will
+// call the renderer's `code` callback to render it and happily
 // return `6` to the parser, which will advance past the code span.
 //
 // The next character to parse is a space. There's no char trigger associated
@@ -1039,7 +1039,7 @@ static inline size_t parse_linebreak(hoedown_document *doc, void *target, const 
 }
 
 // Assumes data[0] == '`'
-static inline size_t parse_code_span(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static inline size_t parse_code(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   if (start > parsed && data[start-1] == '`') return 0;
 
   size_t i = start + 1, content_start, mark;
@@ -1078,7 +1078,7 @@ static inline size_t parse_code_span(hoedown_document *doc, void *target, const 
   code->size = 0;
   collapse_spacing(code, data + content_start, mark - content_start);
 
-  doc->rndr.code_span(target, code, &doc->data);
+  doc->rndr.code(target, code, &doc->data);
   hoedown_pool_pop(&doc->block_buffers, code);
   return i;
 }
@@ -2800,8 +2800,8 @@ static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
   if (ft & HOEDOWN_FT_EMAIL_AUTOLINK)
     register_inline_chars(doc, "<", parse_email_autolink);
 
-  if (ft & HOEDOWN_FT_CODE_SPAN)
-    register_inline_chars(doc, "`", parse_code_span);
+  if (ft & HOEDOWN_FT_CODE)
+    register_inline_chars(doc, "`", parse_code);
 
   if (ft & HOEDOWN_FT_ENTITY)
     register_inline_chars(doc, "&", parse_entity);
@@ -2914,8 +2914,8 @@ static inline void restrict_features(const hoedown_renderer *rndr, hoedown_featu
     not_present |= HOEDOWN_FT_HTML;
   if (!rndr->entity)
     not_present |= HOEDOWN_FT_ENTITY;
-  if (!rndr->code_span)
-    not_present |= HOEDOWN_FT_CODE_SPAN;
+  if (!rndr->code)
+    not_present |= HOEDOWN_FT_CODE;
   if (!rndr->emphasis)
     not_present |= HOEDOWN_FT_EMPHASIS;
   if (!rndr->link)

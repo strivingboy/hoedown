@@ -66,7 +66,7 @@ static struct feature_info features_info[] = {
   {HOEDOWN_FT_EMAIL_AUTOLINK, "email-autolink", "Parse email autolinks between angle brackets."},
   {HOEDOWN_FT_HTML, "inline-html", "Parse inline HTML."},
   {HOEDOWN_FT_ENTITY, "entity", "Parse HTML entities."},
-  {HOEDOWN_FT_CODE_SPAN, "code-span", "Parse code spans between backticks."},
+  {HOEDOWN_FT_CODE, "code", "Parse code spans between backticks."},
   {HOEDOWN_FT_EMPHASIS, "emphasis", "Parse emphasis and strong emphasis."},
   {HOEDOWN_FT_LINK, "link", "Parse links and link references."},
   {HOEDOWN_FT_MATH, "math", "Parse Kramdown-style math spans."},

@@ -38,7 +38,7 @@ extern "C" {
 #define HOEDOWN_FT_EMAIL_AUTOLINK (1l << 15)
 #define HOEDOWN_FT_HTML (1l << 16)
 #define HOEDOWN_FT_ENTITY (1l << 17)
-#define HOEDOWN_FT_CODE_SPAN (1l << 18)
+#define HOEDOWN_FT_CODE (1l << 18)
 #define HOEDOWN_FT_EMPHASIS (1l << 19)
 #define HOEDOWN_FT_LINK (1l << 20)
 #define HOEDOWN_FT_MATH (1l << 22)
@@ -84,7 +84,7 @@ extern "C" {
   HOEDOWN_FT_EMAIL_AUTOLINK |\
   HOEDOWN_FT_HTML |\
   HOEDOWN_FT_ENTITY |\
-  HOEDOWN_FT_CODE_SPAN |\
+  HOEDOWN_FT_CODE |\
   HOEDOWN_FT_EMPHASIS |\
   HOEDOWN_FT_LINK |\
   HOEDOWN_FT_MATH |\
@@ -127,7 +127,7 @@ extern "C" {
   HOEDOWN_FT_EMAIL_AUTOLINK |\
   HOEDOWN_FT_HTML |\
   HOEDOWN_FT_ENTITY |\
-  HOEDOWN_FT_CODE_SPAN |\
+  HOEDOWN_FT_CODE |\
   HOEDOWN_FT_EMPHASIS |\
   HOEDOWN_FT_LINK |\
 \
@@ -152,7 +152,7 @@ extern "C" {
   HOEDOWN_FT_EMAIL_AUTOLINK |\
   HOEDOWN_FT_HTML |\
   HOEDOWN_FT_ENTITY |\
-  HOEDOWN_FT_CODE_SPAN |\
+  HOEDOWN_FT_CODE |\
   HOEDOWN_FT_EMPHASIS |\
   HOEDOWN_FT_LINK |\
 \
@@ -202,7 +202,7 @@ typedef struct hoedown_renderer {
   void (*email_autolink)(void *target, const hoedown_buffer *email, const hoedown_renderer_data *data);
   void (*html)(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data);
   void (*entity)(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data);
-  void (*code_span)(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data);
+  void (*code)(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data);
   void (*emphasis)(void *target, void *content, size_t width, uint8_t delimiter, const hoedown_renderer_data *data);
   void (*link)(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data);
 
