@@ -26,35 +26,28 @@ void hoedown_pool_init(
 
 
 void *hoedown_pool_get(hoedown_pool *pool) {
-  if (unlikely(pool->size >= pool->isize)) {
-    /* Make sure there's space allocated */
-    if (unlikely(pool->isize >= pool->asize)) {
-      pool->asize *= 2;
-      pool->item = hoedown_realloc(pool->item, sizeof(void *) * pool->asize);
-    }
+  if (pool->size > 0)
+    return pool->item[--pool->size];
 
-    /* Initialize a new object */
-    pool->item[pool->isize++] = pool->new_function(pool->opaque);
-  }
-  return pool->item[pool->size++];
+  /* Allocate new item; grow pool */
+  pool->isize++;
+  if (pool->asize < pool->isize)
+    pool->item = hoedown_realloc(pool->item, sizeof(void *) * (pool->asize *= 2));
+  return pool->new_function(pool->opaque);
 }
 
 void hoedown_pool_pop(hoedown_pool *pool, void *item) {
-  assert(pool->size > 0);
-  pool->size--;
-  assert(pool->item[pool->size] == item);
+  assert(pool->size < pool->isize);
+  pool->item[pool->size++] = item;
 }
 
 void hoedown_pool_detach(hoedown_pool *pool, void *item) {
-  hoedown_pool_pop(pool, item);
-
-  if (likely(pool->isize-1 > pool->size))
-    pool->item[pool->size] = pool->item[pool->isize-1];
-
+  assert(pool->size < pool->isize);
   pool->isize--;
 }
 
 void hoedown_pool_uninit(hoedown_pool *pool) {
+  assert(pool->size == pool->isize);
   for (size_t i = 0; i < pool->isize; i++)
     pool->free_function(pool->item[i], pool->opaque);
 

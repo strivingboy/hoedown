@@ -39,13 +39,13 @@ void hoedown_pool_init(
   void *opaque
 );
 
-/* hoedown_pool_get: reserve and return the next object from the pool */
+/* hoedown_pool_get: retrieve an object from the pool */
 void *hoedown_pool_get(hoedown_pool *pool);
 
-/* hoedown_pool_pop: unreserve the last reserved object from the pool */
+/* hoedown_pool_pop: return an object to the pool */
 void hoedown_pool_pop(hoedown_pool *pool, void *item);
 
-/* hoedown_pool_detach: unreserve and disown the last reserved object from the pool */
+/* hoedown_pool_detach: disown an object from the pool */
 void hoedown_pool_detach(hoedown_pool *pool, void *item);
 
 /* hoedown_pool_uninit: uninitialize a pool of objects */

@@ -31,9 +31,7 @@ typedef enum hoedown_features {
   /* Inline constructs */
   HOEDOWN_FT_ROLE = (1 << 9),
   HOEDOWN_FT_ESCAPE = (1 << 10),
-  HOEDOWN_FT_HARD_LINEBREAK = (1 << 11),
   HOEDOWN_FT_LINEBREAK = (1 << 12),
-  HOEDOWN_FT_SOFT_LINEBREAK = (1 << 13),
   HOEDOWN_FT_URI_AUTOLINK = (1 << 14),
   HOEDOWN_FT_EMAIL_AUTOLINK = (1 << 15),
   HOEDOWN_FT_HTML = (1 << 16),
@@ -52,6 +50,8 @@ typedef enum hoedown_features {
   HOEDOWN_FT_PREPROCESS = (1 << 28),
 
   /* Flags */
+  HOEDOWN_FT_LINEBREAK_HARD = (1 << 11),
+  HOEDOWN_FT_LINEBREAK_SOFT = (1 << 13),
   HOEDOWN_FT_LINK_IMAGE = (1 << 21),
   HOEDOWN_FT_INTRA_EMPHASIS = (1 << 29),
   HOEDOWN_FT_MATH_EXPLICIT = (1 << 30),
@@ -74,9 +74,7 @@ typedef enum hoedown_features {
 #define HOEDOWN_FT_INLINE (\
   HOEDOWN_FT_ROLE |\
   HOEDOWN_FT_ESCAPE |\
-  HOEDOWN_FT_HARD_LINEBREAK |\
   HOEDOWN_FT_LINEBREAK |\
-  HOEDOWN_FT_SOFT_LINEBREAK |\
   HOEDOWN_FT_URI_AUTOLINK |\
   HOEDOWN_FT_EMAIL_AUTOLINK |\
   HOEDOWN_FT_HTML |\
@@ -97,6 +95,8 @@ typedef enum hoedown_features {
 0)
 
 #define HOEDOWN_FT_FLAGS (\
+  HOEDOWN_FT_LINEBREAK_HARD |\
+  HOEDOWN_FT_LINEBREAK_SOFT |\
   HOEDOWN_FT_LINK_IMAGE |\
   HOEDOWN_FT_INTRA_EMPHASIS |\
   HOEDOWN_FT_MATH_EXPLICIT |\
@@ -118,7 +118,6 @@ typedef enum hoedown_features {
   HOEDOWN_FT_HTML_BLOCK |\
 \
   HOEDOWN_FT_ESCAPE |\
-  HOEDOWN_FT_HARD_LINEBREAK |\
   HOEDOWN_FT_LINEBREAK |\
   HOEDOWN_FT_URI_AUTOLINK |\
   HOEDOWN_FT_EMAIL_AUTOLINK |\
@@ -130,6 +129,7 @@ typedef enum hoedown_features {
 \
   HOEDOWN_FT_PREPROCESS |\
 \
+  HOEDOWN_FT_LINEBREAK_HARD |\
   HOEDOWN_FT_LINK_IMAGE |\
 0)
 
@@ -191,8 +191,7 @@ typedef struct hoedown_renderer {
   /* Inline constructs */
   void (*string)(void *target, const hoedown_buffer *text, const hoedown_renderer_data *data);
   void (*escape)(void *target, uint8_t character, const hoedown_renderer_data *data);
-  void (*hard_linebreak)(void *target, const hoedown_renderer_data *data);
-  void (*linebreak)(void *target, const hoedown_renderer_data *data);
+  void (*linebreak)(void *target, int is_hard, int is_soft, const hoedown_renderer_data *data);
   void (*uri_autolink)(void *target, const hoedown_buffer *uri, const hoedown_renderer_data *data);
   void (*email_autolink)(void *target, const hoedown_buffer *email, const hoedown_renderer_data *data);
   void (*html)(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data);

@@ -32,7 +32,8 @@ static void render_start(int is_inline, const hoedown_renderer_data *data) {
 static void *render_end(void *target, int is_inline, const hoedown_renderer_data *data) {
   renderer_state *state = data->opaque;
   hoedown_pool_detach(&state->buffers, target);
-  assert(state->buffers.size == 0);
+
+  assert(state->buffers.size == state->buffers.isize);
   return target;
 }
 
@@ -153,9 +154,7 @@ static void rndr_escape(void *target, uint8_t character, const hoedown_renderer_
   hoedown_escape_html(ob, &character, 1);
 }
 
-// hard_linebreak is set to rndr_linebreak
-
-static void rndr_linebreak(void *target, const hoedown_renderer_data *data) {
+static void rndr_linebreak(void *target, int is_hard, int is_soft, const hoedown_renderer_data *data) {
   hoedown_buffer *ob = target;
 
   HOEDOWN_BUFPUTSL(ob, "<br />\n");
@@ -272,7 +271,6 @@ hoedown_renderer *hoedown_html_renderer_new() {
     rndr_string,
     rndr_escape,
     rndr_linebreak,
-    rndr_linebreak,
     rndr_uri_autolink,
     rndr_email_autolink,
     rndr_html,
@@ -295,7 +293,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
   memcpy(rndr, &temp, sizeof(hoedown_renderer));
   rndr->opaque = state;
 
-  hoedown_buffer_pool_init(&state->buffers, 16, 16);
+  hoedown_buffer_pool_init(&state->buffers, 16, 64);
 
   return rndr;
 }

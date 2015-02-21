@@ -17,8 +17,7 @@ static void rndr_html_block(void *target, const hoedown_buffer *html, const hoed
 /* Inline constructs */
 static void rndr_string(void *target, const hoedown_buffer *text, const hoedown_renderer_data *data) {}
 static void rndr_escape(void *target, uint8_t character, const hoedown_renderer_data *data) {}
-static void rndr_hard_linebreak(void *target, const hoedown_renderer_data *data) {}
-static void rndr_linebreak(void *target, const hoedown_renderer_data *data) {}
+static void rndr_linebreak(void *target, int is_hard, int is_soft, const hoedown_renderer_data *data) {}
 static void rndr_uri_autolink(void *target, const hoedown_buffer *uri, const hoedown_renderer_data *data) {}
 static void rndr_email_autolink(void *target, const hoedown_buffer *email, const hoedown_renderer_data *data) {}
 static void rndr_html(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data) {}
@@ -54,7 +53,6 @@ hoedown_renderer *hoedown_noop_renderer_new() {
 
     rndr_string,
     rndr_escape,
-    rndr_hard_linebreak,
     rndr_linebreak,
     rndr_uri_autolink,
     rndr_email_autolink,

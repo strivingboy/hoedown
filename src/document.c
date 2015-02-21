@@ -14,173 +14,305 @@
 
 
 
-// GENERAL INITIALIZATION
-// ----------------------
+// TYPE DEFINITION
+// ===============
 //
-// Define hoedown_document, and export the constructor, destructor
-// and general utilities and types used across the code.
-
+// Define the various types used across the code. As a convention, stacks,
+// pools, tables, counters and other fields are initialized once in
+// the constructor, then reset to their initial state at the end of a render.
+//
+// Head to the corresponding sections for detailed explanations of
+// what each type does.
 
 #define LINK_REFS_TABLE_SIZE 16
 
-struct link_ref {
+
+typedef size_t (*char_trigger)(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size);
+
+typedef enum parsing_mode {
+  DUMB_PARSING,
+  MARKER_PARSING,
+  NORMAL_PARSING
+} parsing_mode;
+
+typedef struct block_char_entry {
+  struct block_char_entry *next;
+
+  char_trigger trigger;
+  int can_interrupt;
+  hoedown_features lazy_ft;
+} block_char_entry;
+
+typedef struct inline_char_entry {
+  struct inline_char_entry *next;
+
+  char_trigger trigger;
+} inline_char_entry;
+
+typedef struct inline_nesting {
+  struct inline_nesting *previous;
+
+  void *parent;
+  uint8_t delimiter;
+  size_t parsed;
+  size_t start;
+  size_t end;
+} inline_nesting;
+
+typedef struct inline_data {
+  struct inline_data *previous;
+
+  void *target;
+  const uint8_t *data;
+  inline_nesting *nesting;
+
+  size_t unbalanced_brackets;
+  size_t link_not_found;
+  int cdata_not_found;
+  int instruction_not_found;
+  int declaration_not_found;
+} inline_data;
+
+typedef struct link_ref {
+  struct link_ref *next;
+
   unsigned int id;
   hoedown_buffer *dest;
   hoedown_buffer *title;
   int has_title;
+} link_ref;
 
-  struct link_ref *next;
+struct hoedown_document {
+  // Renderer stuff
+  hoedown_renderer rndr;
+  hoedown_renderer_data data;
+
+  // Common parsing
+  hoedown_features ft;
+  size_t current_nesting;
+  size_t max_nesting;
+
+  // Block parsing
+  hoedown_pool block_buffers;
+  block_char_entry *block_chars [256];
+  hoedown_pool block_chars__pool;
+  parsing_mode mode;
+  size_t is_tight;
+
+  // Inline parsing
+  hoedown_pool inline_buffers;
+  inline_char_entry *inline_chars [256];
+  hoedown_pool inline_chars__pool;
+  inline_data *inline_data;
+  hoedown_pool inline_data__pool;
+  hoedown_pool inline_nesting__pool;
+  size_t inside_link;
+  size_t plain_links_forbidden;
+
+  // Marker parsing
+  link_ref *link_refs [LINK_REFS_TABLE_SIZE];
+  hoedown_pool link_refs__pool;
+
+  // Other features: preprocessing
+  hoedown_buffer *text;
 };
 
-static void *new_link_ref(void *opaque) {
-  struct link_ref *ref = malloc(sizeof(struct link_ref));
+
+
+// TYPE UTILITTIES
+// ===============
+//
+// Constructors, destructors, and other logic for easy handling
+// of tables, hashing and much more.
+
+// ALLOCATION
+
+#define SIMPLE_ALLOCATOR(TYPE)                                                \
+  static void *_new_##TYPE(void *opaque) { return hoedown_malloc(sizeof(TYPE)); }
+
+SIMPLE_ALLOCATOR(block_char_entry)
+SIMPLE_ALLOCATOR(inline_char_entry)
+SIMPLE_ALLOCATOR(inline_data)
+SIMPLE_ALLOCATOR(inline_nesting)
+
+static void _free_pool_item(void *item, void *opaque) {
+  free(item);
+}
+
+
+// CHAR TRIGGERS
+
+static void register_block_chars(hoedown_document *doc, const char *chars, char_trigger trigger, int can_interrupt, hoedown_features lazy_ft) {
+  for (; *chars; chars++) {
+    uint8_t c = (uint8_t) *chars;
+    block_char_entry *entry = hoedown_pool_get(&doc->block_chars__pool);
+
+    entry->next = NULL;
+    entry->trigger = trigger;
+    entry->can_interrupt = can_interrupt;
+    entry->lazy_ft = lazy_ft;
+
+    block_char_entry **slot = &doc->block_chars[c];
+    while (*slot) slot = &(*slot)->next;
+    *slot = entry;
+  }
+}
+
+static void reset_block_chars(hoedown_document *doc) {
+  size_t i;
+  block_char_entry *entry;
+  for (i = 0; i < 256; i++) {
+    for (entry = doc->block_chars[i]; entry; entry = entry->next)
+      hoedown_pool_pop(&doc->block_chars__pool, entry);
+  }
+}
+
+static void reset_inline_chars(hoedown_document *doc) {
+  size_t i;
+  inline_char_entry *entry;
+  for (i = 0; i < 256; i++) {
+    for (entry = doc->inline_chars[i]; entry; entry = entry->next)
+      hoedown_pool_pop(&doc->inline_chars__pool, entry);
+  }
+}
+
+static void register_inline_chars(hoedown_document *doc, const char *chars, char_trigger trigger) {
+  for (; *chars; chars++) {
+    uint8_t c = (uint8_t) *chars;
+    inline_char_entry *entry = hoedown_pool_get(&doc->inline_chars__pool);
+
+    entry->next = NULL;
+    entry->trigger = trigger;
+
+    inline_char_entry **slot = &doc->inline_chars[c];
+    while (*slot) slot = &(*slot)->next;
+    *slot = entry;
+  }
+}
+
+
+// HASHING / NORMALIZATION
+
+static inline size_t normalize_case_next(struct case_mapping *mapping, const uint8_t *data, size_t size) {
+  size_t i = 1;
+
+  // Collect continuation characters
+  while (i < size && (data[i] & 0xc0) == 0x80) i++;
+
+  // Lookup case mapping, return original data if not found
+  const struct case_mapping *omapping = find_case_mapping((const char *)data, i);
+  if (omapping == NULL) {
+    mapping->value = (const char *)data;
+    mapping->length = i;
+  } else {
+    mapping->value = omapping->value;
+    mapping->length = omapping->length;
+  }
+
+  return i;
+}
+
+static inline unsigned int hash_string(const uint8_t *data, size_t size) {
+  unsigned int hash = 0;
+  size_t i = 0;
+  struct case_mapping mapping;
+
+  while (i < size) {
+    uint8_t c = data[i];
+    if (c >= 0xc0) {
+      i += normalize_case_next(&mapping, data + i, size - i);
+      for (size_t e = 0; e < mapping.length; e++)
+        hash = mapping.value[e] + (hash << 6) + (hash << 16) - hash;
+    } else {
+      if (c >= 'A' && c <= 'Z') c += 0x20;
+      hash = c + (hash << 6) + (hash << 16) - hash;
+      i++;
+    }
+  }
+
+  return hash;
+}
+
+
+// LINK REFS
+
+static void *_new_link_ref(void *opaque) {
+  link_ref *ref = hoedown_malloc(sizeof(link_ref));
   ref->dest = hoedown_buffer_new(16);
   ref->title = hoedown_buffer_new(16);
   return ref;
 }
 
-static void free_link_ref(void *item, void *opaque) {
-  struct link_ref *ref = item;
-  hoedown_buffer_free(ref->title);
-  hoedown_buffer_free(ref->dest);
+static inline void add_link_ref(hoedown_document *doc, link_ref *ref) {
+  link_ref **slot = &doc->link_refs[ref->id % LINK_REFS_TABLE_SIZE];
+  ref->next = *slot;
+  *slot = ref;
+}
+
+static inline link_ref *find_link_ref(hoedown_document *doc, unsigned int id) {
+  link_ref *ref;
+
+  for (ref = doc->link_refs[id % LINK_REFS_TABLE_SIZE]; ref; ref = ref->next)
+    if (ref->id == id) return ref;
+
+  return NULL;
+}
+
+static inline void pop_link_refs(hoedown_document *doc) {
+  link_ref *ref;
+  size_t i;
+
+  for (i = 0; i < LINK_REFS_TABLE_SIZE; i++) {
+    for (ref = doc->link_refs[i]; ref; ref = ref->next)
+      hoedown_pool_pop(&doc->link_refs__pool, ref);
+  }
 }
 
 
-typedef size_t (*char_trigger)(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size);
-typedef int (*delimiter_check)(hoedown_document *doc, const uint8_t *data, size_t parsed, size_t start, size_t size, void *opaque);
+// INLINE DATA
 
-static inline void restrict_features(const hoedown_renderer *rndr, hoedown_features *ft);
-static inline void set_active_chars(char_trigger *active_chars, hoedown_features ft);
+static inline void open_inline_data(hoedown_document *doc, void *target, const uint8_t *data) {
+  inline_data *inline_data = hoedown_pool_get(&doc->inline_data__pool);
+  inline_data->previous = doc->inline_data;
+  doc->inline_data = inline_data;
 
-enum parsing_mode {
-  // Skip all blocks without parsing their inline content,
-  // but still parse block content.
-  DUMB_PARSING,
+  inline_data->target = target;
+  inline_data->data = data;
+  inline_data->nesting = NULL;
 
-  // In this mode, blocks are parsed, but not rendered.
-  // The content of a block is not parsed unless it's also block content,
-  // or it's the content of a marker.
-  //
-  // This mode is used once when rendering, to parse the markers of a document.
-  // Markers themselves aren't rendered, but their content is parsed, rendered
-  // and hashed for later.
-  MARKER_PARSING,
-
-  // This is the normal mode of operation. Everything is parsed and renderer,
-  // except markers, which are simply skipped.
-  //
-  // After parsing with MARKER_PARSING mode, this mode is used to parse
-  // and render the document.
-  NORMAL_PARSING,
-};
-
-struct emphasis_entry {
-  void *target;
-  size_t parsed;
-  size_t start;
-
-  uint8_t delimiter;
-  size_t width;
-};
-
-struct emphasis_stack {
-  void **current_target;
-  size_t initial_size;
-  size_t max_size;
-  size_t size;
-  struct emphasis_entry *entry;
-};
-
-struct hoedown_document {
-  // user-specified
-  hoedown_renderer rndr;
-  hoedown_features ft;
-  size_t max_nesting;
-
-  // for renderer use
-  hoedown_renderer_data data;
-
-  // for all parsing
-  size_t current_nesting;
-  enum parsing_mode mode;
-  hoedown_buffer *text;
-  hoedown_pool buffers_block;
-  hoedown_pool buffers_inline;
-
-  // for block parsing
-  size_t is_tight;
-
-  // for inline parsing
-  char_trigger active_chars[256];
-  struct emphasis_stack emphasis_stack;
-  int contains_link;
-
-  // for marker parsing
-  hoedown_pool marker_link_refs;
-  struct link_ref *link_refs_table [LINK_REFS_TABLE_SIZE];
-};
-
-hoedown_document *hoedown_document_new(
-  hoedown_renderer *renderer,
-  hoedown_features features,
-  size_t max_nesting
-) {
-  restrict_features(renderer, &features);
-
-  hoedown_document *doc = hoedown_malloc(sizeof(hoedown_document));
-
-  memcpy(&doc->rndr, renderer, sizeof(hoedown_renderer));
-  doc->ft = features;
-  doc->max_nesting = max_nesting;
-
-  doc->data.doc = (hoedown_internal *)doc;
-  doc->data.opaque = renderer->opaque;
-
-  doc->current_nesting = 0;
-  doc->text = hoedown_buffer_new(64);
-  hoedown_buffer_pool_init(&doc->buffers_block, 4, 16);
-  hoedown_buffer_pool_init(&doc->buffers_inline, 8, 16);
-
-  doc->is_tight = 0;
-
-  set_active_chars(doc->active_chars, features);
-  doc->emphasis_stack.current_target = NULL;
-  doc->emphasis_stack.initial_size = 0;
-  doc->emphasis_stack.max_size = max_nesting;
-  doc->emphasis_stack.entry = hoedown_calloc(max_nesting, sizeof(struct emphasis_entry));
-
-  //FIXME: this needs limiting
-  hoedown_pool_init(&doc->marker_link_refs, 4, new_link_ref, free_link_ref, NULL);
-
-  return doc;
+  inline_data->unbalanced_brackets = 0;
+  inline_data->link_not_found = 0;
+  inline_data->cdata_not_found = 0;
+  inline_data->instruction_not_found = 0;
+  inline_data->declaration_not_found = 0;
 }
 
-void hoedown_document_free(hoedown_document *doc) {
-  if (!doc) return;
+static inline void close_inline_data(hoedown_document *doc, void *target) {
+  inline_data *inline_data = doc->inline_data;
 
-  hoedown_buffer_free(doc->text);
-  hoedown_pool_uninit(&doc->buffers_block);
-  hoedown_pool_uninit(&doc->buffers_inline);
+  assert(inline_data->target == target);
+  assert(inline_data->nesting == NULL);
 
-  free(doc->emphasis_stack.entry);
+  doc->inline_data = inline_data->previous;
+  hoedown_pool_pop(&doc->inline_data__pool, inline_data);
+}
 
-  hoedown_pool_uninit(&doc->marker_link_refs);
 
-  free(doc);
+// OTHER
+
+// Sets the data and size of a read-only buffer.
+static inline void set_buffer_data(hoedown_buffer *buf, const uint8_t *data, size_t start, size_t end) {
+  assert(!buf->unit);
+  buf->data = (uint8_t *)data + start;
+  buf->size = end - start;
 }
 
 
 
 // LOW LEVEL PARSING UTILITIES
-// ---------------------------
+// ===========================
 //
-// Very simple methods that help in parsing. We could use isalpha, isspace,
-// isalnum and friends, but they're locale dependent. We don't like that.
-//
-// **Important:** the code in the section below for parsing HTML depends on
-// these functions. If any of these functions is modified, the code at the
-// section below should call a (preserved) copy instead.
-
+// Very simple methods that help in parsing.
 
 // Checks if the char is an ASCII digit.
 static inline int is_digit_ascii(uint8_t ch) {
@@ -197,9 +329,14 @@ static inline int is_lower_ascii(uint8_t ch) {
   return ch >= 'a' && ch <= 'z';
 }
 
+// Checks if the char is an alphabetic ASCII letter.
+static inline int is_alpha_ascii(uint8_t ch) {
+  return is_lower_ascii(ch) || is_upper_ascii(ch);
+}
+
 // Checks if the char is an alphanumeric ASCII character.
 static inline int is_alnum_ascii(uint8_t ch) {
-  return is_lower_ascii(ch) || is_upper_ascii(ch) || is_digit_ascii(ch);
+  return is_alpha_ascii(ch) || is_digit_ascii(ch);
 }
 
 // Checks if the char is an ASCII punctuation character.
@@ -225,6 +362,30 @@ static inline int is_punct_ascii(uint8_t ch) {
   return punctuation_chars[ch];
 }
 
+// Checks if the char is an atext character,
+// according to RFC 5322 section 3.2.3.
+static inline int is_atext(uint8_t ch) {
+  static const char atext_chars [256] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 1,
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  };
+  return atext_chars[ch];
+}
+
 // Checks if the char is a valid space character.
 // Tabs and carriage returns are stripped during preprocessing.
 // Form feeds aren't treated as spacing (except for HTML).
@@ -236,17 +397,6 @@ static inline int is_space(uint8_t ch) {
       // ch == 0x0d // carriage return
       ;
 }
-
-// HTML-specific version of is_space
-static inline int html_is_space(uint8_t ch) {
-  return ch == 0x20 // space
-      // ch == 0x09 // tab
-      || ch == 0x0a // linefeed
-      || ch == 0x0c // form feed
-      // ch == 0x0d // carriage return
-      ;
-}
-
 
 // Checks if the character at a certain position in the input
 // is backslash escaped or not.
@@ -342,89 +492,74 @@ static inline void unescape_backslash(hoedown_buffer *ob, const uint8_t *data, s
 
 // Utility method to unescape both backslashes and HTML entities.
 static inline void unescape_both(hoedown_document *doc, hoedown_buffer *ob, const uint8_t *data, size_t size) {
-  hoedown_buffer *intermediate = hoedown_pool_get(&doc->buffers_inline);
+  hoedown_buffer *intermediate = hoedown_pool_get(&doc->inline_buffers);
   intermediate->size = 0;
 
   unescape_backslash(intermediate, data, size);
   hoedown_unescape_html(ob, intermediate->data, intermediate->size);
 
-  hoedown_pool_pop(&doc->buffers_inline, intermediate);
+  hoedown_pool_pop(&doc->inline_buffers, intermediate);
 }
 
-
-
-// OTHER UTILITIES
-// ---------------
-//
-// Miscellaneous logic used when parsing.
-
-static inline size_t normalize_case_next(struct case_mapping *mapping, const uint8_t *data, size_t size) {
-  size_t i = 1;
-
-  // Collect continuation characters
-  while (i < size && (data[i] & 0xc0) == 0x80) i++;
-
-  // Lookup case mapping, return original data if not found
-  const struct case_mapping *omapping = find_case_mapping((const char *)data, i);
-  if (omapping == NULL) {
-    mapping->value = (const char *)data;
-    mapping->length = i;
-  } else {
-    mapping->value = omapping->value;
-    mapping->length = omapping->length;
-  }
-
-  return i;
-}
-
-static inline unsigned int hash_string(const uint8_t *data, size_t size) {
-  unsigned int hash = 0;
-  size_t i = 0;
-  struct case_mapping mapping;
+// Expand tabs to spaces with a four-character tabstop.
+static inline void expand_tabs(hoedown_buffer *ob, const uint8_t *data, size_t i, size_t size) {
+  size_t mark;
+  size_t isize = ob->size;
+  static const uint8_t *tab = (const uint8_t *)"    ";
 
   while (i < size) {
-    uint8_t c = data[i];
-    if (c >= 0xc0) {
-      i += normalize_case_next(&mapping, data + i, size - i);
-      for (size_t e = 0; e < mapping.length; e++)
-        hash = mapping.value[e] + (hash << 6) + (hash << 16) - hash;
-    } else {
-      if (c >= 'A' && c <= 'Z') c += 0x20;
-      hash = c + (hash << 6) + (hash << 16) - hash;
-      i++;
+    mark = i;
+    while (1) {
+      // Advance until we find a tab, but keep multi-byte characters in mind
+      while (i < size && (data[i] & 0xc0) != 0x80 && data[i] != '\t') i++;
+      if (i >= size || data[i] == '\t') break;
+      // this byte should not be counted
+      i++; isize++;
     }
-  }
 
-  return hash;
+    hoedown_buffer_put(ob, data + mark, i - mark);
+    if (i >= size) break;
+
+    hoedown_buffer_put(ob, tab, 4 - (ob->size - isize) % 4);
+    i++;
+  }
 }
 
-static inline void add_link_ref(hoedown_document *doc, struct link_ref *ref) {
-  struct link_ref **slot = &doc->link_refs_table[ref->id % LINK_REFS_TABLE_SIZE];
-  ref->next = *slot;
-  *slot = ref;
-}
+// Preprocesses the input by normalizing linebreaks and expanding tabs.
+static inline void normalize_spacing(hoedown_buffer *ob, const uint8_t *data, size_t size) {
+  size_t i = 0, mark;
+  hoedown_buffer_grow(ob, size);
 
-static inline struct link_ref *find_link_ref(hoedown_document *doc, unsigned int id) {
-  struct link_ref *ref = doc->link_refs_table[id % LINK_REFS_TABLE_SIZE];
+  while (1) {
+    mark = i;
+    while (i < size && data[i] != '\n' && data[i] != '\r') i++;
+    expand_tabs(ob, data, mark, i);
 
-  while (ref) {
-    if (ref->id == id) return ref;
-    ref = ref->next;
+    if (i >= size) break;
+
+    if (data[i] == '\r') i++;
+    if (i < size && data[i] == '\n') i++;
+    hoedown_buffer_putc(ob, '\n');
   }
-
-  return NULL;
 }
 
 
 
 // HTML PARSING
-// ------------
+// ============
 //
-// This code is an adapted version of Lanli's HTML parsing routines.
-// This only returns the end of a tag, without saving any data, since we
-// don't need to interpret a tag, only skip it. The name of the tag can
-// optionally be saved, since we need it to check if a tag is a block.
+// HTML parsing functions. This code has been adapted from Lanli,
+// make sure to keep it up to date with latest master changes.
 
+// HTML-specific version of is_space
+static inline int html_is_space(uint8_t ch) {
+  return ch == 0x20 // space
+      // ch == 0x09 // tab
+      || ch == 0x0a // linefeed
+      || ch == 0x0c // form feed
+      // ch == 0x0d // carriage return
+  ;
+}
 
 // Checks if the char can be part of an attribute name.
 // NOTE: CommonMark is stricter than HTML5.
@@ -592,31 +727,153 @@ static size_t html_parse_comment(const uint8_t *data, size_t size) {
 
 
 // ACTUAL PARSING
-// --------------
+// ==============
 //
-// Logic to parse various Markdown constructs. By convention, inline
-// constructs are declared first, then block constructs.
+// Things start to get interesting! So called "parsing functions" follow.
+// Parsing functions have the general form:
 //
-// There are two types of methods. Tests are prefixed with `text_`, and they
-// doesn't parse the construct, just look quickly for a *possibility*
-// of the construct being present.
+//      Returns end of the parsed construct (bytes parsed so far)
+//      or zero if parsing failed due to illegal syntax
+//      |
+//     size_t parse_whatever(
+//       hoedown_document *doc,    <-- document instance (if needed)
+//       [output parameters],      <-- output parameters (optional)
+//       const uint8_t *data,      <-- data to parse
+//       size_t parsed,            <-- for char triggers only (read below)
+//       size_t start,             <-- where to start parsing from (0 if not present)
+//       size_t size,              <-- size of data
+//       [input parameters]        <-- other input parameters (optional)
+//     ) {...}
 //
-// Then there are the actual parsing routines, prefixed with `parse_`. They
-// follow very specific guidelines, which are there to prevent bugs or
-// unsafe operations, and guarantee readability.
+// Parsing functions are small, composable and have a clear target:
+// parsing a determinate **construct** found immediately at the start of
+// data. Example of constructs: a link, a code block, a list bullet.
 //
-// Block parsing functions should never return a position that falls in the
-// middle of a line. Block parsing functions should always be called at the
-// start of a non-empty line.
+// They declare a variable `i` initialized at `start` or `0` and start
+// advancing through bytes in `data`, incrementing `i` and storing the
+// parsed data as necessary. A parsing function should `return 0;` as soon
+// as invalid syntax is found. Non-zero will be returned if (and only if)
+// a complete, valid construct was found at that location and it could be
+// parsed and stored successfully.
 //
-// Parsing functions must ALWAYS be called ONLY if
-// the associated callbacks are defined in the renderer, that is, if the
-// feature flag is set.
+// There are several useful patterns used to code parsing functions, such
+// as peeking, advancing and rewinding. You'll discover them as you read.
+//
+// ### Char triggers
+//
+// These are the most important parsing functions. They are associated with
+// characters, and called by the parser when a construct starting with one of
+// these characters is found. They're of the form:
+//
+//     void parse_whatever(hoedown_document *doc, void *target, const uint8_t *data,
+//                         size_t parsed, size_t start, size_t size) {...}
+//
+// Imagine we're parsing this inline data:
+//
+//     `code` [link]()
+//
+// The first character is a backtick. It'll look up the char trigger associated
+// with that character, which is `parse_code_span`. Thus, it'll call
+// `parse_code_span` with the parameters:
+//
+//     doc:      <the doc>
+//     target:   <some target>
+//     data:     "`code` [link]()"
+//     parsed:   0
+//     start:    0
+//     size:     20
+//
+// There's a valid codespan in that position, so `parse_code_span` will
+// call the renderer's `code_span` callback to render it and happily
+// return `6` to the parser, which will advance past the code span.
+//
+// The next character to parse is a space. There's no char trigger associated
+// with a space, so it cannot be parsed. The parser takes note and carries on.
+//
+// The next character is a bracket. Good, there's a char trigger associated
+// to that, so the parser calls `parse_link` with the following parameters:
+//
+//     doc:      <the doc>
+//     target:   <some target>
+//     data:     "`code` [link]()"
+//     parsed:   6
+//     start:    7
+//     size:     20
+//
+// Notice how `parsed` is different from `start`. This is to inform
+// `parse_link` that the region from 6 to 7 of the input (that is, the
+// space) hasn't been parsed (nor rendered) by any function yet.
+//
+// `parse_link` detects a valid link at position `7`, renders it and
+// returns `20`.
+//
+// ### Fallback parsing functions
+//
+// Fallback parsing functions are catch-all functions taking any unparsed
+// input and rendering it. There are two of them: `parse_string` catches all
+// inline data, and `parse_paragraph` parses all block data.
+//
+// What happens with input that is not parsed by any char trigger, such as
+// the space above? Yep, it's parsed through `parse_string` and rendered as
+// text.
+//
+// Fallback parsing functions can be called either from the parser, or
+// from char triggers to "flush" the unparsed text before rendering again.
+// They are the only parse functions that return `void`.
+//
+// ### Block parsing
+//
+// There are a few added details when parsing block data, but the concept is
+// the same as with inline parsing: the first non-space character in the line
+// is matched and the appropiate char trigger is called.
+//
+// But block nesting has a few complexities which have to be kept in mind
+// when writing block char triggers. First, `parsed` and `start` will always
+// point at the start of a non-empty line. Then, the char trigger is
+// *assumed* to return at the start of a line. Failure to do so will
+// have a rather funny effect. Head to "Block parsing" to learn more.
+//
+// ### Nesting
+//
+// Some Markdown constructs in turn contain Markdown. In this case, the
+// parsing function will call `parse_inline` (if it's a block with inline
+// content, such as a paragraph or header), or call `parse_block` (if it's
+// a block containing other blocks), or add entries to the nesting stack (if
+// it's an inline containing other inlines).
+//
+// `parse_block` must *never* be called from inline parsing functions, the
+// whole parser relies on that assumption.
+//
+// Please head to the corresponding sections below to learn more about block
+// and inline nesting.
+//
+// ### Auxiliary parsing functions
+//
+// Of course, not all parsing funtions are char triggers or fallbacks. It's
+// common to break large or complex syntax (like links) into small blocks:
+// `parse_link_title`, `parse_link_destination`, `parse_link_inline_spec`
+// as an example.
+//
+// These auxiliary parsing functions don't usually call the renderer, just
+// return the size and/or store some text into a buffer. In many cases they
+// don't have a `start` parameter, they start parsing from the beginning.
+//
+// Some auxiliary parsing functions are suffixed `__` and a word. This is
+// to indincate that they are private, only meant to be called by the function
+// with the unprefixed name.
+
 
 // These are defined later
-static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *data, size_t size, uint8_t delimiter, delimiter_check check, void *opaque);
-static size_t parse_any_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t i, size_t size, size_t lazy_size, hoedown_features lazy_ft);
+
+static size_t parse_single_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size, size_t lazy_size, hoedown_features lazy_ft);
 static size_t parse_block(hoedown_document *doc, void *target, const uint8_t *data, size_t size, size_t lazy_size, hoedown_features lazy_ft);
+
+static size_t parse_single_inline(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size);
+static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *data, size_t size, uint8_t delimiter);
+
+static inline_nesting *open_nesting(hoedown_document *doc, uint8_t delimiter, size_t parsed, size_t start, size_t end);
+static void close_nesting(hoedown_document *doc, inline_nesting *entry);
+static void discard_nestings(hoedown_document *doc, inline_nesting *top);
 
 
 // COMMON PARSING
@@ -667,10 +924,8 @@ static inline size_t parse_link_destination__free(hoedown_document *doc, hoedown
 
 static inline size_t parse_link_destination(hoedown_document *doc, hoedown_buffer *destination, const uint8_t *data, size_t size) {
   size_t result;
-
   if ((result = parse_link_destination__enclosed(doc, destination, data, size)))
     return result;
-
   return parse_link_destination__free(doc, destination, data, size);
 }
 
@@ -733,6 +988,56 @@ static inline void parse_string(hoedown_document *doc, void *target, const uint8
   doc->rndr.string(target, &text, &doc->data);
 }
 
+// data[start] is assumed to be `\\`
+static inline size_t parse_escape(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t i = start + 1;
+
+  if (i < size && is_punct_ascii(data[i])) {
+    parse_string(doc, target, data + parsed, start - parsed);
+    doc->rndr.escape(target, data[i], &doc->data);
+    return i + 1;
+  }
+
+  return 0;
+}
+
+// data[start] is assumed to be '\n'
+static inline size_t parse_linebreak(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t tail = start, head = start + 1;
+
+  // Rewind on all trailing spaces
+  while (tail > parsed && data[tail-1] == ' ') tail--;
+  // Skip all leading spaces
+  while (head < size && data[head] == ' ') head++;
+
+  // Hard linebreak
+  if (doc->ft & HOEDOWN_FT_LINEBREAK_HARD && start > parsed && data[start-1] == '\\') {
+    parse_string(doc, target, data + parsed, (start-1) - parsed);
+    doc->rndr.linebreak(target, 1, 0, &doc->data);
+    return head;
+  }
+
+  // Normal linebreak
+  if (start - tail >= 2) {
+    parse_string(doc, target, data + parsed, tail - parsed);
+    doc->rndr.linebreak(target, 0, 0, &doc->data);
+    return head;
+  }
+
+  // Soft linebreak
+  if (doc->ft & HOEDOWN_FT_LINEBREAK_SOFT) {
+    parse_string(doc, target, data + parsed, tail - parsed);
+    doc->rndr.linebreak(target, 0, 1, &doc->data);
+    return head;
+  }
+
+  // Nothing, just a newline.
+  if (tail == start && head == start + 1) return 0;
+  parse_string(doc, target, data + parsed, tail - parsed);
+  parse_string(doc, target, (const uint8_t *)"\n", 1);
+  return head;
+}
+
 // Assumes data[0] == '`'
 static inline size_t parse_code_span(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   if (start > parsed && data[start-1] == '`') return 0;
@@ -769,12 +1074,12 @@ static inline size_t parse_code_span(hoedown_document *doc, void *target, const 
   // Render!
   parse_string(doc, target, data + parsed, start - parsed);
 
-  hoedown_buffer *code = hoedown_pool_get(&doc->buffers_block);
+  hoedown_buffer *code = hoedown_pool_get(&doc->block_buffers);
   code->size = 0;
   collapse_spacing(code, data + content_start, mark - content_start);
 
   doc->rndr.code_span(target, code, &doc->data);
-  hoedown_pool_pop(&doc->buffers_block, code);
+  hoedown_pool_pop(&doc->block_buffers, code);
   return i;
 }
 
@@ -811,13 +1116,69 @@ static inline size_t parse_uri_autolink(hoedown_document *doc, void *target, con
   return i + 1;
 }
 
+static inline size_t parse_email_label(const uint8_t *data, size_t size) {
+  size_t i = 0;
+
+  // Starts with alphanumeric character
+  if (i < size && is_alnum_ascii(data[i])) i++;
+  else return 0;
+
+  // May also have hypens inside
+  while (i < size && (is_alnum_ascii(data[i]) || data[i] == '-')) i++;
+
+  // Verify the last character is *not* an hypen
+  if (data[i-1] == '-') return 0;
+
+  return i;
+}
+
+static inline size_t parse_email_label__cont(const uint8_t *data, size_t size) {
+  size_t i = 0, mark;
+
+  if (i < size && data[i] == '.') i++;
+  else return 0;
+
+  mark = i;
+  i += parse_email_label(data + i, size - i);
+  if (mark == i) return 0;
+
+  return i;
+}
+
 // data[0] is assumed to be '<'
 static inline size_t parse_email_autolink(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  size_t i = start + 1, mark;//TODO
+  size_t i = start + 1, mark;
 
   // Collect username
+  mark = i;
+  while (i < size && (is_atext(data[i]) || data[i] == '.')) i++;
+  if (mark == i) return 0;
 
-  return i + 1;
+  // Separator
+  if (i < size && data[i] == '@') i++;
+  else return 0;
+
+  // Collect host
+  mark = i;
+  i += parse_email_label(data + i, size - i);
+  if (mark == i) return 0;
+
+  while (1) {
+    mark = i;
+    i += parse_email_label__cont(data + i, size - i);
+    if (mark == i) break;
+  }
+
+  // Ending '>'
+  if (i < size && data[i] == '>') i++;
+  else return 0;
+
+  // Render!
+  parse_string(doc, target, data + parsed, start - parsed);
+
+  hoedown_buffer email = {(uint8_t *)data + start + 1, i - start - 2, 0, 0, NULL, NULL};
+  doc->rndr.email_autolink(target, &email, &doc->data);
+  return i;
 }
 
 static inline size_t parse_link_spec__inline_title(hoedown_document *doc, hoedown_buffer *title, const uint8_t *data, size_t size) {
@@ -836,7 +1197,7 @@ static inline size_t parse_link_spec__inline_title(hoedown_document *doc, hoedow
   return i;
 }
 
-static inline size_t parse_link_spec__inline(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+static inline size_t parse_link_spec__inline(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
   size_t i = start, mark;
 
   // Left parenthesis
@@ -866,7 +1227,7 @@ static inline size_t parse_link_spec__inline(hoedown_document *doc, struct link_
   return i;
 }
 
-static inline size_t parse_link_spec__collapsed(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+static inline size_t parse_link_spec__collapsed(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
   size_t i = start;
 
   // Optional spacing
@@ -877,13 +1238,13 @@ static inline size_t parse_link_spec__collapsed(hoedown_document *doc, struct li
   else return 0;
 
   // This is a collapsed link, try to match link text
-  hoedown_buffer *label = hoedown_pool_get(&doc->buffers_inline);
+  hoedown_buffer *label = hoedown_pool_get(&doc->inline_buffers);
   label->size = 0;
   collapse_spacing(label, data + text_start, text_end - text_start);
   ref->id = hash_string(label->data, label->size);
-  hoedown_pool_pop(&doc->buffers_inline, label);
+  hoedown_pool_pop(&doc->inline_buffers, label);
 
-  struct link_ref *oref = find_link_ref(doc, ref->id);
+  link_ref *oref = find_link_ref(doc, ref->id);
   if (oref) {
     hoedown_buffer_set(ref->dest, oref->dest->data, oref->dest->size);
     ref->has_title = oref->has_title;
@@ -897,27 +1258,27 @@ static inline size_t parse_link_spec__collapsed(hoedown_document *doc, struct li
   return i;
 }
 
-static inline size_t parse_link_spec__full(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+static inline size_t parse_link_spec__full(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
   size_t i = start, mark;
 
   // Optional spacing
   while (i < size && is_space(data[i])) i++;
 
   // Label
-  hoedown_buffer *label = hoedown_pool_get(&doc->buffers_inline);
+  hoedown_buffer *label = hoedown_pool_get(&doc->inline_buffers);
   mark = i;
   i += parse_link_label(label, data + i, size - i);
 
   if (mark == i) {
-    hoedown_pool_pop(&doc->buffers_inline, label);
+    hoedown_pool_pop(&doc->inline_buffers, label);
     return 0;
   }
 
   // This is a reference link, try to match label
   ref->id = hash_string(label->data, label->size);
-  hoedown_pool_pop(&doc->buffers_inline, label);
+  hoedown_pool_pop(&doc->inline_buffers, label);
 
-  struct link_ref *oref = find_link_ref(doc, ref->id);
+  link_ref *oref = find_link_ref(doc, ref->id);
   if (oref) {
     hoedown_buffer_set(ref->dest, oref->dest->data, oref->dest->size);
     ref->has_title = oref->has_title;
@@ -931,7 +1292,7 @@ static inline size_t parse_link_spec__full(hoedown_document *doc, struct link_re
   return i;
 }
 
-static inline size_t parse_link_spec(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+static inline size_t parse_link_spec(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
   size_t result;
 
   // Try to match different spec types
@@ -943,13 +1304,13 @@ static inline size_t parse_link_spec(hoedown_document *doc, struct link_ref *ref
     return result;
 
   // This is a shortcut link, try to match link text
-  hoedown_buffer *label = hoedown_pool_get(&doc->buffers_inline);
+  hoedown_buffer *label = hoedown_pool_get(&doc->inline_buffers);
   label->size = 0;
   collapse_spacing(label, data + text_start, text_end - text_start);
   ref->id = hash_string(label->data, label->size);
-  hoedown_pool_pop(&doc->buffers_inline, label);
+  hoedown_pool_pop(&doc->inline_buffers, label);
 
-  struct link_ref *oref = find_link_ref(doc, ref->id);
+  link_ref *oref = find_link_ref(doc, ref->id);
   if (oref) {
     hoedown_buffer_set(ref->dest, oref->dest->data, oref->dest->size);
     ref->has_title = oref->has_title;
@@ -963,72 +1324,100 @@ static inline size_t parse_link_spec(hoedown_document *doc, struct link_ref *ref
   return start;
 }
 
-// Called from parse_brackets to parse the rest of the (possible) link
-// data[start] is assumed to be ']'
-static inline size_t parse_link(hoedown_document *doc, void *target, void *content, const uint8_t *data, size_t parsed, size_t start, size_t size, int is_image, size_t text_start, size_t text_end) {
-  size_t i = text_end + 1;
-  struct link_ref *ref = hoedown_pool_get(&doc->marker_link_refs);
+// data[start] is assumed to be '['
+static inline size_t parse_link(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t i = start + 1, mark, content_start, content_end;
+  inline_data *inline_data = doc->inline_data;
+  int current_inside_link = doc->inside_link, current_forbidden = doc->plain_links_forbidden;
+  int is_image = 0;
+  void *content;
+  link_ref *ref;
 
-  // Parse a link spec
-  i = parse_link_spec(doc, ref, data, i, size, text_start, text_end);
+  if (start < inline_data->link_not_found) return 0;
+
+  // Is this an image link?
+  if (doc->ft & HOEDOWN_FT_LINK_IMAGE && start > parsed && data[start-1] == '!') {
+    start--;
+    is_image = 1;
+  }
+
+  // Prepare the environment, parse the content
+  inline_data->link_not_found = size;
+  doc->inside_link = 1;
+  if (!is_image) doc->plain_links_forbidden = 1;
+
+  mark = i;
+  content = doc->rndr.object_get(1, &doc->data);
+  i += parse_inline(doc, content, data + i, size - i, ']');
+
+  doc->inside_link = current_inside_link;
+  doc->plain_links_forbidden = current_forbidden;
+  if (!inline_data->link_not_found && inline_data->previous)
+    inline_data->previous->link_not_found = 0;
+
+  // No closing bracket found?
+  if (i >= size) {
+    doc->rndr.object_pop(content, 1, &doc->data);
+    return (doc->plain_links_forbidden) ? size : 0;
+  }
+
+  assert(data[i] == ']');
+  content_start = mark;
+  content_end = i;
+  inline_data->link_not_found = i;
+
+  // Try to parse a link spec
+  i++;
+  ref = hoedown_pool_get(&doc->link_refs__pool);
+  i = parse_link_spec(doc, ref, data, i, size, content_start, content_end);
+
   if (!ref->id) {
-    hoedown_pool_pop(&doc->marker_link_refs, ref);
+    hoedown_pool_pop(&doc->link_refs__pool, ref);
+    doc->rndr.object_pop(content, 1, &doc->data);
     return 0;
+  }
+
+  // Valid link!
+  if (inline_data->previous) inline_data->previous->link_not_found = 0;
+
+  if (!is_image && doc->plain_links_forbidden) {
+    hoedown_pool_pop(&doc->link_refs__pool, ref);
+    doc->rndr.object_pop(content, 1, &doc->data);
+    return size;
   }
 
   // Render!
   parse_string(doc, target, data + parsed, start - parsed);
   doc->rndr.link(target, content, ref->dest, ref->has_title ? ref->title : NULL, is_image, &doc->data);
+  hoedown_pool_pop(&doc->link_refs__pool, ref);
   doc->rndr.object_pop(content, 1, &doc->data);
-  if (!is_image) doc->contains_link = 1;
   return i;
 }
 
-// data[start] is assumed to be '['
+// data[start] is assumed to be '[' or ']'
 static inline size_t parse_brackets(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  size_t i = start, result, text_start;
-  int is_image = 0;
+  // This is only activated in certain contexts, such as inside of
+  // a link (both plain and image). It's there to prevent the link
+  // of containing unbalanced square brackets.
+  if (!doc->inside_link) return 0;
 
-  // Is this an image link?
-  if (start > parsed && data[start-1] == '!' && doc->ft & HOEDOWN_FT_LINK_IMAGE) {
-    is_image = 1;
-    start--;
+  if (data[start] == '[') {
+    // Opening bracket
+    doc->inline_data->unbalanced_brackets++;
+  } else {
+    // Closing bracket
+    if (doc->inline_data->unbalanced_brackets == 0) return 0;
+    doc->inline_data->unbalanced_brackets--;
   }
 
-  // Parse link text
-  void *content = doc->rndr.object_get(1, &doc->data);
-  i++;
-  text_start = i;
-
-  doc->contains_link = 0;
-  i += parse_inline(doc, content, data + i, size - i, ']', NULL, NULL);
-
-  if (i >= size) {
-    // Delimiter not found
-    doc->rndr.object_pop(content, 1, &doc->data);
-    return 0;
-  }
-
-  // Try to parse rest of the link
-  result = 0;
-  if (!doc->contains_link || is_image)
-    result = parse_link(doc, target, content, data, parsed, start, size, is_image, text_start, i);
-
-  if (result == 0) {
-    doc->rndr.object_pop(content, 1, &doc->data);
-    // This is not a link, so just bind the [] and return
-    parse_string(doc, target, data + parsed, text_start - parsed);
-    parse_inline(doc, target, data + text_start, i - text_start, 0, NULL, NULL);
-    parse_string(doc, target, (const uint8_t *)"]", 1);
-    return i + 1;
-  }
-
-  return result;
+  parse_string(doc, target, data + parsed, start+1 - parsed);
+  return start+1;
 }
 
 // data[0] is assumed to be '<'
-static inline size_t parse_cdata(const uint8_t *data, size_t size) {
+static inline size_t parse_cdata(hoedown_document *doc, const uint8_t *data, size_t size) {
   size_t i = 0;
+  if (doc->inline_data->cdata_not_found) return 0;
 
   // Starting prefix
   if (size >= 9 && memcmp(data, "<![CDATA[", 9) == 0) i += 9;
@@ -1039,12 +1428,14 @@ static inline size_t parse_cdata(const uint8_t *data, size_t size) {
   while (i < size && !(data[i] == ']' && data[i+1] == ']' && data[i+2] == '>')) i++;
 
   if (i < size) return i + 3;
+  doc->inline_data->cdata_not_found = 1;
   return 0;
 }
 
 // data[0] is assumed to be '<'
-static inline size_t parse_processing_instruction(const uint8_t *data, size_t size) {
+static inline size_t parse_processing_instruction(hoedown_document *doc, const uint8_t *data, size_t size) {
   size_t i = 1;
+  if (doc->inline_data->instruction_not_found) return 0;
 
   // Starting prefix
   if (i < size && data[i] == '?') i++;
@@ -1055,12 +1446,14 @@ static inline size_t parse_processing_instruction(const uint8_t *data, size_t si
   while (i < size && !(data[i] == '?' && data[i+1] == '>')) i++;
 
   if (i < size) return i + 2;
+  doc->inline_data->instruction_not_found = 1;
   return 0;
 }
 
 // data[0] is assumed to be '<'
-static inline size_t parse_declaration(const uint8_t *data, size_t size) {
+static inline size_t parse_declaration(hoedown_document *doc, const uint8_t *data, size_t size) {
   size_t i = 1, mark;
+  if (doc->inline_data->declaration_not_found) return 0;
 
   // Starting prefix
   if (i < size && data[i] == '!') i++;
@@ -1080,68 +1473,51 @@ static inline size_t parse_declaration(const uint8_t *data, size_t size) {
   while (i < size && data[i] != '>') i++;
 
   if (i < size) return i + 1;
+  doc->inline_data->declaration_not_found = 1;
   return 0;
 }
 
-static inline void discard_emphasis(hoedown_document *doc, const uint8_t *data) {
-  struct emphasis_stack *stack = &doc->emphasis_stack;
-  void *content = *stack->current_target;
+// data[start] is assumed to be '<'
+static inline size_t parse_html(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t result;
 
-  // Pop entry from stack
-  struct emphasis_entry *entry = &stack->entry[--stack->size];
-  void *target = entry->target;
+  const uint8_t *cur_data = data + start;
+  size_t cur_size = size - start;
 
-  if (!entry->delimiter) {
-    doc->rndr.object_pop(target, 1, &doc->data);
-    return;
+  if (
+    (result = html_parse_start_tag(NULL, cur_data, cur_size)) ||
+    (result = html_parse_end_tag(NULL, cur_data, cur_size)) ||
+    (result = html_parse_comment(cur_data, cur_size)) ||
+    (result = parse_cdata(doc, cur_data, cur_size)) ||
+    (result = parse_processing_instruction(doc, cur_data, cur_size)) ||
+    (result = parse_declaration(doc, cur_data, cur_size))
+  ) {
+    parse_string(doc, target, data + parsed, start - parsed);
+    hoedown_buffer html = {(uint8_t *)cur_data, result, 0, 0, NULL, NULL};
+    doc->rndr.html(target, &html, &doc->data);
+    return start + result;
   }
 
-  // Merge content into target
-  parse_string(doc, target, data + entry->parsed, entry->start + entry->width - entry->parsed);
-  doc->rndr.object_merge(target, content, 1, &doc->data);
-
-  // Replace current target
-  *stack->current_target = target;
-  doc->rndr.object_pop(content, 1, &doc->data);
+  return 0;
 }
 
-static inline void close_emphasis(hoedown_document *doc, const uint8_t *data) {
-  struct emphasis_stack *stack = &doc->emphasis_stack;
-  void *content = *stack->current_target;
+// data[start] is assumed to be '&'
+static inline size_t parse_entity(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t i = start + 1;
 
-  // Pop entry from stack
-  struct emphasis_entry *entry = &stack->entry[--stack->size];
-  void *target = entry->target;
+  hoedown_buffer *character = hoedown_pool_get(&doc->inline_buffers);
+  character->size = 0;
+  i += hoedown_unescape_entity(character, data + i, size - i);
 
-  // Render emphasis
-  parse_string(doc, target, data + entry->parsed, entry->start - entry->parsed);
-  doc->rndr.emphasis(target, content, entry->width, entry->delimiter, &doc->data);
+  if (i > start + 1) {
+    parse_string(doc, target, data + parsed, start - parsed);
+    doc->rndr.entity(target, character, &doc->data);
+    hoedown_pool_pop(&doc->inline_buffers, character);
+    return i;
+  }
 
-  // Replace current target
-  *stack->current_target = target;
-  doc->rndr.object_pop(content, 1, &doc->data);
-}
-
-static inline void close_emphasis_partial(hoedown_document *doc, const uint8_t *data, size_t width) {
-  struct emphasis_stack *stack = &doc->emphasis_stack;
-  void *content = *stack->current_target;
-
-  // Render internal emphasis
-  struct emphasis_entry *prev = &stack->entry[stack->size-1];
-  void *target = doc->rndr.object_get(1, &doc->data);
-  doc->rndr.emphasis(target, content, width, prev->delimiter, &doc->data);
-
-  // Move current entry to the next slot
-  struct emphasis_entry *next = &stack->entry[stack->size++];
-  memcpy(next, prev, sizeof(struct emphasis_entry));
-
-  // Set previous slot to an empty entry, so that content gets poped
-  prev->target = content;
-  prev->delimiter = 0;
-
-  // Set next slot to the remaining emphasis and replace current target
-  next->width -= width;
-  *stack->current_target = target;
+  hoedown_pool_pop(&doc->inline_buffers, character);
+  return 0;
 }
 
 static inline int can_open_emphasis(hoedown_document *doc, const uint8_t *data, size_t parsed, size_t start, size_t size, uint8_t delimiter, size_t i) {
@@ -1159,49 +1535,50 @@ static inline int can_close_emphasis(hoedown_document *doc, const uint8_t *data,
 // data[start] is assumed to be '*' or '_'
 static inline size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   uint8_t delimiter = data[start];
-  size_t i = start + 1, mark = start;
-  struct emphasis_stack *stack = &doc->emphasis_stack;
+  size_t i = start + 1, mark = start, width;
+  int can_open, can_close;
+  inline_nesting *entry;
 
   // Refuse to process the same delimiter again, otherwise advance
   if (start > parsed && data[start-1] == delimiter) return 0;
   while (i < size && data[i] == delimiter) i++;
 
+  if (i - mark > 2 * doc->max_nesting) return 0;
+  can_open = can_open_emphasis(doc, data, parsed, start, size, delimiter, i);
+  can_close = can_close_emphasis(doc, data, parsed, start, size, delimiter, i);
+
   // Try to close as many emphasis as possible with this delimiter
-  if (can_close_emphasis(doc, data, parsed, start, size, delimiter, i)) {
-    for (size_t e = stack->size; e > stack->initial_size; e--) {
-      if (stack->entry[e-1].delimiter != delimiter) continue;
+  if (can_close) {
+    for (entry = doc->inline_data->nesting; entry && mark < i; entry = entry->previous) {
+      if (entry->delimiter != delimiter) continue;
 
-      // Found a matching emphasis, discard previous emphasis
-      while (stack->size > e) discard_emphasis(doc, data);
-
-      // Close emphasis!
-      parse_string(doc, *stack->current_target, data + parsed, mark - parsed);
-      size_t width = stack->entry[e-1].width;
-      if (width > i - mark && stack->size < stack->max_size) {
-        width = i - mark;
-        close_emphasis_partial(doc, data, width);
-      } else {
-        close_emphasis(doc, data);
-      }
-
-      // Update positions as appropiate
+      // Found a valid entry to close! Yay!
+      discard_nestings(doc, entry);
+      width = entry->end - entry->start;
+      if (width > i - mark) width = i - mark;
+      parse_string(doc, doc->inline_data->target, data + parsed, mark - parsed);
       mark += width;
       parsed = mark;
-      if (mark >= i) return i;
+
+      // Render emphasis and [partially] close the nesting
+      if (width < entry->end - entry->start) {
+        void *intermediate = doc->rndr.object_get(1, &doc->data);
+        doc->rndr.emphasis(intermediate, doc->inline_data->target, width, delimiter, &doc->data);
+        doc->rndr.object_pop(doc->inline_data->target, 1, &doc->data);
+        doc->inline_data->target = intermediate;
+        entry->end -= width;
+      } else {
+        parse_string(doc, entry->parent, data + entry->parsed, entry->start - entry->parsed);
+        doc->rndr.emphasis(entry->parent, doc->inline_data->target, width, delimiter, &doc->data);
+        close_nesting(doc, entry);
+      }
     }
   }
 
-  // Try to open an emphasis with this delimiter
-  if (can_open_emphasis(doc, data, parsed, start, size, delimiter, i) && stack->size < stack->max_size) {
-    struct emphasis_entry *entry = &stack->entry[stack->size++];
-    entry->target = *stack->current_target;
-    entry->parsed = parsed;
-    entry->start = mark;
-    entry->delimiter = delimiter;
-    entry->width = i - mark;
-
-    *stack->current_target = doc->rndr.object_get(1, &doc->data);
-    return i;
+  // Open nesting entry for this emphasis
+  if (can_open && mark < i && doc->current_nesting < doc->max_nesting) {
+    entry = open_nesting(doc, delimiter, parsed, mark, i);
+    parsed = mark = i;
   }
 
   return mark > start ? mark : 0;
@@ -1219,16 +1596,9 @@ static inline void parse_paragraph(hoedown_document *doc, void *target, const ui
   while (content_end > content_start && is_space(data[content_end-1])) content_end--;
 
   void *content = doc->rndr.object_get(1, &doc->data);
-  parse_inline(doc, content, data + content_start, content_end - content_start, 0, NULL, NULL);
+  parse_inline(doc, content, data + content_start, content_end - content_start, 0);
   doc->rndr.paragraph(target, content, doc->is_tight == doc->current_nesting, &doc->data);
   doc->rndr.object_pop(content, 1, &doc->data);
-}
-
-static inline int test_atx_header(const uint8_t *data, size_t size) {
-  return size >= 1 && (data[0] == '#' || (data[0] == ' ' &&
-         size >= 2 && (data[1] == '#' || (data[1] == ' ' &&
-         size >= 3 && (data[2] == '#' || (data[2] == ' ' &&
-         size >= 4 && (data[3] == '#')))))));
 }
 
 static inline size_t parse_atx_header_end(const uint8_t *data, size_t size) {
@@ -1288,7 +1658,7 @@ static inline size_t parse_atx_header(hoedown_document *doc, void *target, const
     parse_paragraph(doc, target, data + parsed, start - parsed);
 
     void *content = doc->rndr.object_get(1, &doc->data);
-    parse_inline(doc, content, data + content_start, mark - content_start, 0, NULL, NULL);
+    parse_inline(doc, content, data + content_start, mark - content_start, 0);
     doc->rndr.atx_header(target, content, width, &doc->data);
     doc->rndr.object_pop(content, 1, &doc->data);
   }
@@ -1296,21 +1666,12 @@ static inline size_t parse_atx_header(hoedown_document *doc, void *target, const
   return i;
 }
 
+// Beware! This has to be called at the start of the setext rule (the header's
+// text should be at the line just before start, which shouldn't be included
+// in `parsed`).
 static inline size_t parse_setext_header(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark, content_start, content_end;
   uint8_t character;
-
-  // Skip indentation
-  mark = i;
-  while (i < size && data[i] == ' ') i++;
-  if (i - mark > 3) return 0;
-
-  // Skip until next line
-  content_start = i;
-  while (i < size && data[i] != '\n') i++;
-  if (i >= size || content_start == i) return 0;
-  content_end = i;
-  i++; // skip past newline
 
   // Skip indentation
   mark = i;
@@ -1330,24 +1691,36 @@ static inline size_t parse_setext_header(hoedown_document *doc, void *target, co
   if (i < size && data[i] != '\n') return 0;
   i++;
 
-  // Trim spaces on content
+
+  // Make sure there's a newline just before start
+  if (start > parsed && data[start-1] == '\n') start--;
+  else return 0;
+
+  // Rewind to trim trailing spaces
+  while (start > parsed && data[start-1] == ' ') start--;
+  content_end = start;
+
+  // Rewind until we have the whole line caught
+  while (start > parsed && data[start-1] != '\n') start--;
+  content_start = start;
+
+  // Check that this is the only unparsed line; advance to skip leading spaces
+  if (content_start == content_end || start > parsed) return 0;
   while (content_start < content_end && data[content_start] == ' ') content_start++;
-  while (content_end > content_start && data[content_end-1] == ' ') content_end--;
+
 
   // Render!
   if (doc->mode == NORMAL_PARSING) {
     parse_paragraph(doc, target, data + parsed, start - parsed);
 
     void *content = doc->rndr.object_get(1, &doc->data);
-    parse_inline(doc, content, data + content_start, content_end - content_start, 0, NULL, NULL);
+    parse_inline(doc, content, data + content_start, content_end - content_start, 0);
     doc->rndr.setext_header(target, content, character == '=', &doc->data);
     doc->rndr.object_pop(content, 1, &doc->data);
   }
 
   return i;
 }
-
-//FIXME: test_horizontal_rule
 
 static inline size_t parse_horizontal_rule(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start;
@@ -1399,14 +1772,10 @@ static inline size_t parse_horizontal_rule(hoedown_document *doc, void *target, 
   return i;
 }
 
-static inline int test_indented_code_block(const uint8_t *data, size_t size) {
-  return size > 4 && data[0] == ' ' && data[1] == ' ' && data[2] == ' ' && data[3] == ' ';
-}
-
 static inline size_t parse_indented_code_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark;
   size_t last_non_empty_line = 0;
-  hoedown_buffer *code = hoedown_pool_get(&doc->buffers_block);
+  hoedown_buffer *code = hoedown_pool_get(&doc->block_buffers);
   code->size = 0;
 
   while (1) {
@@ -1443,7 +1812,7 @@ static inline size_t parse_indented_code_block(hoedown_document *doc, void *targ
     doc->rndr.indented_code_block(target, code, &doc->data);
   }
 
-  hoedown_pool_pop(&doc->buffers_block, code);
+  hoedown_pool_pop(&doc->block_buffers, code);
   return i;
 }
 
@@ -1472,8 +1841,6 @@ static inline size_t parse_code_fence(const uint8_t *data, size_t size, uint8_t 
   return i;
 }
 
-//FIXME: test_fenced_code_block
-
 static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark;
   size_t indentation, start_width, end_width;
@@ -1495,7 +1862,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
   hoedown_buffer *info = NULL;
 
   if (doc->mode == NORMAL_PARSING) {
-    info = hoedown_pool_get(&doc->buffers_inline);
+    info = hoedown_pool_get(&doc->inline_buffers);
     info->size = 0;
     unescape_both(doc, info, data + mark, i - mark);
     while (info->size > 0 && info->data[info->size-1] == ' ') info->size--;
@@ -1505,7 +1872,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
 
   // Parse the content
   if (unlikely(indentation) && doc->mode == NORMAL_PARSING) {
-    hoedown_buffer *code = hoedown_pool_get(&doc->buffers_block);
+    hoedown_buffer *code = hoedown_pool_get(&doc->block_buffers);
     code->size = 0;
 
     size_t line_start;
@@ -1534,7 +1901,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
     parse_paragraph(doc, target, data + parsed, start - parsed);
 
     doc->rndr.fenced_code_block(target, code, info->size ? info : NULL, &doc->data);
-    hoedown_pool_pop(&doc->buffers_block, code);
+    hoedown_pool_pop(&doc->block_buffers, code);
   } else {
     // Optimization: When indentation is 0 we don't need intermediate buffers.
     size_t text_start = i, line_start;
@@ -1564,21 +1931,17 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
   }
 
   if (doc->mode == NORMAL_PARSING)
-    hoedown_pool_pop(&doc->buffers_inline, info);
+    hoedown_pool_pop(&doc->inline_buffers, info);
 
   return i;
 }
 
-static inline int test_html_block(const uint8_t *data, size_t size) {
-  return size >= 1 && (data[0] == '<' || (data[0] == ' ' &&
-         size >= 2 && (data[1] == '<' || (data[1] == ' ' &&
-         size >= 3 && (data[2] == '<' || (data[2] == ' ' &&
-         size >= 4 && (data[3] == '<')))))));
-}
-
-//FIXME: rewrite it when spec problem is resolved
 static inline size_t parse_html_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, content_start, mark;
+  // FIXME: Right now this doesn't implement what is in the spec,
+  // because of some inconsistencies with the reference parsers.
+  // There's an issue tracking this (jgm/CommonMark#177), and
+  // this function should be rewritten when the problem is resolved.
 
   // Skip three optional spaces
   if (unlikely(i + 3 > size)) return 0;
@@ -1607,7 +1970,7 @@ static inline size_t parse_html_block(hoedown_document *doc, void *target, const
   // Try to parse various constructs with a mega-if
   const uint8_t *html_data = data + content_start;
   size_t html_size = mark - content_start;
-  hoedown_buffer *name = hoedown_pool_get(&doc->buffers_inline);
+  hoedown_buffer *name = hoedown_pool_get(&doc->inline_buffers);
 
   if (
     // HTML start / end tag
@@ -1621,15 +1984,15 @@ static inline size_t parse_html_block(hoedown_document *doc, void *target, const
     || html_parse_comment(html_data, html_size)
 
     // CDATA section
-    || parse_cdata(html_data, html_size)
+    //|| parse_cdata(html_data, html_size)
 
     // Processing instruction
-    || parse_processing_instruction(html_data, html_size)
+    //|| parse_processing_instruction(html_data, html_size)
 
     // Declaration
-    || parse_declaration(html_data, html_size)
+    //|| parse_declaration(html_data, html_size)
   ) {
-    hoedown_pool_pop(&doc->buffers_inline, name);
+    hoedown_pool_pop(&doc->inline_buffers, name);
 
     // Render!
     if (doc->mode == NORMAL_PARSING) {
@@ -1642,15 +2005,8 @@ static inline size_t parse_html_block(hoedown_document *doc, void *target, const
     return i;
   }
 
-  hoedown_pool_pop(&doc->buffers_inline, name);
+  hoedown_pool_pop(&doc->inline_buffers, name);
   return 0;
-}
-
-static inline int test_link_reference(const uint8_t *data, size_t size) {
-  return size >= 1 && (data[0] == '[' || (data[0] == ' ' &&
-         size >= 2 && (data[1] == '[' || (data[1] == ' ' &&
-         size >= 3 && (data[2] == '[' || (data[2] == ' ' &&
-         size >= 4 && (data[3] == '[')))))));
 }
 
 static inline size_t parse_link_reference_title(hoedown_document *doc, hoedown_buffer *title, const uint8_t *data, size_t size) {
@@ -1673,7 +2029,7 @@ static inline size_t parse_link_reference_title(hoedown_document *doc, hoedown_b
   return i;
 }
 
-static inline size_t parse_link_reference_content(hoedown_document *doc, struct link_ref *ref, const uint8_t *data, size_t size) {
+static inline size_t parse_link_reference_content(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t size) {
   size_t i = 0, mark;
 
   // Optional spacing, up to one newline
@@ -1703,7 +2059,7 @@ static inline size_t parse_link_reference_content(hoedown_document *doc, struct 
 static inline size_t parse_link_reference(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark;
   hoedown_buffer *label;
-  struct link_ref *ref;
+  link_ref *ref;
 
   // Skip three optional spaces
   if (unlikely(i + 3 > size)) return 0;
@@ -1714,40 +2070,40 @@ static inline size_t parse_link_reference(hoedown_document *doc, void *target, c
   }}}
 
   // Link label and colon
-  label = hoedown_pool_get(&doc->buffers_inline);
+  label = hoedown_pool_get(&doc->inline_buffers);
   mark = i;
   i += parse_link_label(label, data + i, size - i);
 
   if (i > mark && i < size && data[i] == ':') i++;
   else {
-    hoedown_pool_pop(&doc->buffers_inline, label);
+    hoedown_pool_pop(&doc->inline_buffers, label);
     return 0;
   }
 
   // Contents (destination and title) and newline or EOF
-  ref = hoedown_pool_get(&doc->marker_link_refs);
+  ref = hoedown_pool_get(&doc->link_refs__pool);
   mark = i;
   i += parse_link_reference_content(doc, ref, data + i, size - i);
 
   if (i > mark && (i >= size || data[i] == '\n')) i++;
   else {
-    hoedown_pool_pop(&doc->buffers_inline, label);
-    hoedown_pool_pop(&doc->marker_link_refs, ref);
+    hoedown_pool_pop(&doc->inline_buffers, label);
+    hoedown_pool_pop(&doc->link_refs__pool, ref);
     return 0;
   }
 
   // Store!
   if (doc->mode == MARKER_PARSING) {
     ref->id = hash_string(label->data, label->size);
-    hoedown_pool_pop(&doc->buffers_inline, label);
+    hoedown_pool_pop(&doc->inline_buffers, label);
 
     if (find_link_ref(doc, ref->id))
-      hoedown_pool_pop(&doc->marker_link_refs, ref);
+      hoedown_pool_pop(&doc->link_refs__pool, ref);
     else
       add_link_ref(doc, ref);
   } else if (doc->mode == NORMAL_PARSING) {
-    hoedown_pool_pop(&doc->buffers_inline, label);
-    hoedown_pool_pop(&doc->marker_link_refs, ref);
+    hoedown_pool_pop(&doc->inline_buffers, label);
+    hoedown_pool_pop(&doc->link_refs__pool, ref);
     parse_paragraph(doc, target, data + parsed, start - parsed);
   }
   return i;
@@ -1809,7 +2165,7 @@ static inline size_t parse_quote_block_content(hoedown_document *doc, void *cont
     i = mark;
     current_size = work->size;
     while (1) {
-      if (parse_any_block(doc, NULL, data, i, i, size, size, 0)) break;
+      if (parse_single_block(doc, NULL, data, i, i, size, size, 0)) break;
 
       while (i < size && data[i] != '\n') i++;
       if (i < size) i++;
@@ -1862,7 +2218,7 @@ static inline size_t parse_quote_block(hoedown_document *doc, void *target, cons
   if (mark == i) return 0;
 
   // Get working buffer & content
-  work = hoedown_pool_get(&doc->buffers_block);
+  work = hoedown_pool_get(&doc->block_buffers);
   work->size = 0;
 
   if (doc->mode == NORMAL_PARSING)
@@ -1885,7 +2241,7 @@ static inline size_t parse_quote_block(hoedown_document *doc, void *target, cons
     doc->rndr.object_pop(content, 0, &doc->data);
   }
 
-  hoedown_pool_pop(&doc->buffers_block, work);
+  hoedown_pool_pop(&doc->block_buffers, work);
   return i;
 }
 
@@ -1984,7 +2340,7 @@ static size_t collect_list_items__lines(hoedown_document *doc, const uint8_t *da
 
     result = parse_block(doc, NULL, work->data + parsed, last_size - parsed, work->size - parsed, HOEDOWN_FT_LIST | HOEDOWN_FT_QUOTE_BLOCK);
     if (result == last_size - parsed) break;
-    if (result < last_size - parsed && parse_any_block(doc, NULL, work->data, parsed, last_size, work->size, work->size, 0)) break;
+    if (result < last_size - parsed && parse_single_block(doc, NULL, work->data, parsed, last_size, work->size, work->size, 0)) break;
     last_position = i;
     last_size = work->size;
     double_empty = 0;
@@ -2066,8 +2422,8 @@ static inline size_t parse_list(hoedown_document *doc, void *target, const uint8
   int is_ordered, is_loose = (current_mode == NORMAL_PARSING) ? 0 : 1, number = 0;
   void *content;
 
-  hoedown_buffer *work = hoedown_pool_get(&doc->buffers_block);
-  hoedown_buffer *slices = hoedown_pool_get(&doc->buffers_inline);
+  hoedown_buffer *work = hoedown_pool_get(&doc->block_buffers);
+  hoedown_buffer *slices = hoedown_pool_get(&doc->inline_buffers);
   work->size = slices->size = 0;
 
   // 1. Collect list items
@@ -2076,14 +2432,14 @@ static inline size_t parse_list(hoedown_document *doc, void *target, const uint8
   doc->mode = current_mode;
 
   if (i == start) {
-    hoedown_pool_pop(&doc->buffers_inline, slices);
-    hoedown_pool_pop(&doc->buffers_block, work);
+    hoedown_pool_pop(&doc->inline_buffers, slices);
+    hoedown_pool_pop(&doc->block_buffers, work);
     return 0;
   }
 
   if (current_mode == DUMB_PARSING) {
-    hoedown_pool_pop(&doc->buffers_inline, slices);
-    hoedown_pool_pop(&doc->buffers_block, work);
+    hoedown_pool_pop(&doc->inline_buffers, slices);
+    hoedown_pool_pop(&doc->block_buffers, work);
     return i;
   }
 
@@ -2118,110 +2474,119 @@ static inline size_t parse_list(hoedown_document *doc, void *target, const uint8
     doc->rndr.object_pop(content, 0, &doc->data);
   }
 
-  hoedown_pool_pop(&doc->buffers_inline, slices);
-  hoedown_pool_pop(&doc->buffers_block, work);
+  hoedown_pool_pop(&doc->inline_buffers, slices);
+  hoedown_pool_pop(&doc->block_buffers, work);
   return i;
 }
 
 
 
 // BLOCK PARSING
-// -------------
+// =============
 //
 // Here's the implementation of `parse_block`, the entry point for block
-// parsing, and `parse_any_block`, which defines the priorities and
-// requirements for all block constructs.
+// parsing. This will skip (at most) the first three spaces of a line.
+// It'll look up the char triggers associated with the next character in the
+// line, and will call them in order.
+//
+// If some of the char triggers succeeds parsing, `parse_block` will advance
+// to the returned position. If all of the char triggers returned `0`, or
+// there were no matching char triggers to call, it'll skip to the next line.
+//
+// `set_block_chars` is also implemented, which associates block char triggers
+// to their characters depending on the enabled features. It's called by the
+// main constructor.
+//
+// ### Nesting
+//
+// Block parsing functions can call `parse_block` or `parse_inline` to parse
+// child content.
+//
+// `doc->current_nesting` is incremented every time `parse_block()` enters,
+// and decremented every time it exits.
+//
+// If incrementing `doc->current_nesting` would make it greater than
+// `doc->max_nesting`, then `parse_block()` will refuse to parse and return
+// immediately.
+//
+// ### Lazy content
 //
 // For regular block parsing, `parse_block` should be called with the
 // same value in `size` and `lazy_size`.
 //
-// But if there are lazy lines at the end of the regular content: `lazy_size`
-// should be set to the size of the regular content plus the lazy lines.
+// If the caller wants to test for valid lazy lines at the end of the data,
+// it should set `size` to the size of the data excluding lazy lines, and
+// `lazy_size` to the size including lazy lines. `lazy_ft` should be set to
+// indicate which constructs are allowed to take the lazy lines.
 //
-// Lazy lines are only parsed if they belong to a block of type `lazy_ft`.
-// Please note that not *all* of the additional content may be parsed, only
-// the valid lazy lines. If the returned value equals `size`, there were no
-// valid lazy lines parsed.
+//  - If the returned value equals `size`, there were no valid lazy lines.
 //
-// If the lazy lines were parsed as part of the specified block, returned value
-// will be greater than `size`. But if the lazy lines continued a paragraph at
-// the end of the regular content, the paragraph (and lazy lines) will not be
-// parsed, and the returned value will be less than `size`. Both cases are
-// valid lazy lines, but must be handled differently; see i.e. quote blocks.
+//  - If the returned value is greater than `size`, there were some (but not
+//    necessarily all) valid lazy lines, that were parsed as part of one of the
+//    indicated constructs in `lazy_ft`.
+//
+//  - If the returned value is less than `size`, (some of the) lazy lines
+//    continuate a paragraph just at the end of the non-lazy input. Neither
+//    the paragraph nor the lazy lines were parsed.
+//
+// ### Parsing modes
+//
+// `parse_block` and block parsing functions are affected by the setting of
+// `doc->mode`. This is called the "parsing mode", and can be one of:
+//
+//  - Dumb parsing (`DUMB_PARSING`). In this mode, blocks are parsed, but
+//    their content is not. Anything is rendered, so the target can be `NULL`
+//    or any value. This mode is useful to detect the type of block present or
+//    test for lazy lines without affecting output.
+//
+//  - Marker parsing (`MARKER_PARSING`). In this mode, blocks and block content
+//    are parsed, but only markers have their inline content parsed and
+//    rendered (the marker itself needs no rendering). This mode should *never*
+//    set directly by any parsing function, it's set only once by
+//    `hoedown_document_render` to do a first pass on the input.
+//
+//  - Normal parsing (`NORMAL_PARSING`). This the mode where most parsing
+//    happens. Blocks, block content and inline content are parsed and
+//    rendered, except markers, which are treated as if `DUMB_PARSING` was set.
+//
+// When rendering block input, `hoedown_document_render` will call
+// `parse_block` with `MARKER_PARSING` first, then with `NORMAL_PARSING`.
 
+// If you use this, make sure you don't give it empty lines at start position.
+static inline size_t parse_single_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size, size_t lazy_size, hoedown_features lazy_ft) {
+  size_t i = start, result;
+  block_char_entry *entry;
 
-// Try to parse a block construct at a specific position, which is assumed
-// to be the start of a non-empty line.
-static inline size_t parse_any_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t i, size_t size, size_t lazy_size, hoedown_features lazy_ft) {
-  size_t result;
+  // Is this an empty line? If so, flush accumulated input and return.
+  while (i < size && data[i] == ' ') i++;
+  if (i >= size || data[i] == '\n') {
+    parse_paragraph(doc, target, data + parsed, start - parsed);
+    return i + 1;
+  }
 
-  // Some constructs can't interrupt paragraphs, so we check that parsed == i
+  // Good, line is not empty. Advance past the first three spaces at most.
+  if (i - start > 3) i = start + 3;
 
-  if (doc->ft & HOEDOWN_FT_INDENTED_CODE_BLOCK && parsed == i &&
-      test_indented_code_block(data + i, size - i) &&
-      (result = parse_indented_code_block(doc, target, data, parsed, i, size)))
-    return result;
-
-  if (doc->ft & HOEDOWN_FT_FENCED_CODE_BLOCK &&
-      (result = parse_fenced_code_block(doc, target, data, parsed, i,
-        lazy_ft & HOEDOWN_FT_FENCED_CODE_BLOCK ? lazy_size : size)))
-    return result;
-
-  if (doc->ft & HOEDOWN_FT_HORIZONTAL_RULE &&
-      (result = parse_horizontal_rule(doc, target, data, parsed, i, size)))
-    return result;
-
-  if (doc->ft & HOEDOWN_FT_QUOTE_BLOCK &&
-      (result = parse_quote_block(doc, target, data, parsed, i,
-        lazy_ft & HOEDOWN_FT_QUOTE_BLOCK ? lazy_size : size)))
-    return result;
-
-  if (doc->ft & HOEDOWN_FT_LIST &&
-      (result = parse_list(doc, target, data, parsed, i,
-        lazy_ft & HOEDOWN_FT_LIST ? lazy_size : size)))
-    return result;
-
-  if (doc->ft & HOEDOWN_FT_ATX_HEADER &&
-      test_atx_header(data + i, size - i) &&
-      (result = parse_atx_header(doc, target, data, parsed, i, size)))
-    return result;
-
-  if (doc->ft & HOEDOWN_FT_SETEXT_HEADER && parsed == i &&
-      (result = parse_setext_header(doc, target, data, parsed, i, size)))
-    return result;
-
-  if (doc->ft & HOEDOWN_FT_HTML_BLOCK &&
-      test_html_block(data + i, size - i) &&
-      (result = parse_html_block(doc, target, data, parsed, i, size)))
-    return result;
-
-  if (doc->ft & HOEDOWN_FT_LINK && parsed == i &&
-      test_link_reference(data + i, size - i) &&
-      (result = parse_link_reference(doc, target, data, parsed, i, size)))
-    return result;
+  // Call char triggers in order
+  for (entry = doc->block_chars[data[i]]; entry; entry = entry->next) {
+    if (parsed < start && !entry->can_interrupt) continue;
+    result = entry->trigger(doc, target, data, parsed, start,
+    (lazy_ft & entry->lazy_ft) ? lazy_size : size);
+    if (result) return result;
+  }
 
   return 0;
 }
 
-
 static size_t parse_block(hoedown_document *doc, void *target, const uint8_t *data, size_t size, size_t lazy_size, hoedown_features lazy_ft) {
-  if (doc->current_nesting > doc->max_nesting) return size;
+  if (doc->current_nesting >= doc->max_nesting) return size;
   doc->current_nesting++;
 
-  size_t i = 0, result, parsed = 0;
+  size_t i = 0, parsed = 0, result;
 
   while (i < size) {
-    // First, check to see if this is an empty line
-    // If it is, parse any accumulated content as paragraph, and skip
-    if ((result = next_line_empty(data + i, size - i))) {
-      parse_paragraph(doc, target, data + parsed, i - parsed);
-      i += result;
-      parsed = i;
-      continue;
-    }
-
-    // Try to parse a construct here
-    if ((result = parse_any_block(doc, target, data, parsed, i, size, lazy_size, lazy_ft))) {
+    // Try to parse a construct (or empty line) here
+    if ((result = parse_single_block(doc, target, data, parsed, i, size, lazy_size, lazy_ft))) {
       i = parsed = result;
       continue;
     }
@@ -2241,223 +2606,281 @@ static size_t parse_block(hoedown_document *doc, void *target, const uint8_t *da
   return parsed;
 }
 
+static void set_block_chars(hoedown_document *doc, hoedown_features ft) {
+  if (doc->ft & HOEDOWN_FT_SETEXT_HEADER)
+    register_block_chars(doc, "-=", parse_setext_header, 1, HOEDOWN_FT_SETEXT_HEADER);
 
+  if (doc->ft & HOEDOWN_FT_INDENTED_CODE_BLOCK)
+    register_block_chars(doc, " ", parse_indented_code_block, 0, HOEDOWN_FT_INDENTED_CODE_BLOCK);
 
-// CHAR TRIGGERS, INLINE PARSING
-// -----------------------------
-//
-// Here's the implementation of `inline_parse`. When it finds an interesting
-// character in the input, it looks up the appropiate function (called *char
-// trigger*) to process the input at that point.
-//
-// The char trigger (for example, `char_dollar`) then calls routines to
-// parse possible constructs at that point.
-//
-// If passed a delimiter, `parse_inline` will look for that character in
-// unparsed input. If it's found, and the passed check callback accepts it,
-// parsing ends at that point.
+  if (doc->ft & HOEDOWN_FT_FENCED_CODE_BLOCK)
+    register_block_chars(doc, "`~", parse_fenced_code_block, 1, HOEDOWN_FT_FENCED_CODE_BLOCK);
 
+  if (doc->ft & HOEDOWN_FT_HORIZONTAL_RULE)
+    register_block_chars(doc, "*-_", parse_horizontal_rule, 1, HOEDOWN_FT_HORIZONTAL_RULE);
 
-static size_t char_escape(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  size_t i = start + 1;
+  if (doc->ft & HOEDOWN_FT_QUOTE_BLOCK)
+    register_block_chars(doc, ">", parse_quote_block, 1, HOEDOWN_FT_QUOTE_BLOCK);
 
-  if (i >= size) return 0;
+  if (doc->ft & HOEDOWN_FT_LIST)
+    register_block_chars(doc, "-*+0123456789", parse_list, 1, HOEDOWN_FT_LIST);
 
-  if (doc->ft & HOEDOWN_FT_ESCAPE && is_punct_ascii(data[i])) {
-    parse_string(doc, target, data + parsed, start - parsed);
-    doc->rndr.escape(target, data[i], &doc->data);
-    return i + 1;
-  }
+  if (doc->ft & HOEDOWN_FT_ATX_HEADER)
+    register_block_chars(doc, "#", parse_atx_header, 1, HOEDOWN_FT_ATX_HEADER);
 
-  if (doc->ft & HOEDOWN_FT_HARD_LINEBREAK && data[i] == '\n') {
-    parse_string(doc, target, data + parsed, start - parsed);
-    doc->rndr.hard_linebreak(target, &doc->data);
+  if (doc->ft & HOEDOWN_FT_HTML_BLOCK)
+    register_block_chars(doc, "<", parse_html_block, 1, HOEDOWN_FT_HTML_BLOCK);
 
-    i++;
-    while (i < size && data[i] == ' ') i++;
-    return i;
-  }
-
-  return 0;
+  if (doc->ft & HOEDOWN_FT_LINK)
+    register_block_chars(doc, "[", parse_link_reference, 0, HOEDOWN_FT_LINK);
 }
 
-static size_t char_newline(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  size_t tail = start, head = start + 1;
 
-  // Rewind on all trailing spaces
-  while (tail > parsed && data[tail-1] == ' ') tail--;
-  // Skip all leading spaces
-  while (head < size && data[head] == ' ') head++;
 
-  if (doc->ft & HOEDOWN_FT_LINEBREAK && start - tail >= 2) {
-    parse_string(doc, target, data + parsed, tail - parsed);
-    doc->rndr.hard_linebreak(target, &doc->data);
-    return head;
-  }
+// INLINE PARSING
+// ==============
+//
+// Here's the implementation of `parse_inline`, the entry point for inline
+// parsing. It calls char triggers as explained in the Parsing section.
+//
+// Just as `parse_block`, `parse_inline` will increment and decrement
+// `doc->current_nesting` when it enters and exits, respectively, and will
+// refuse to parse if `doc->current_nesting` would exceed `doc->max_nesting`.
+//
+// `parse_inline` will create and initialize `doc->inline_data` when it enters,
+// and remove it when it exits, by replacing it with the previous one, so that
+// eventually `doc->inline_data` will be `NULL` again.
+//
+// The `inline_data` structure is the ideal place to store state fields only
+// belonging to a single call of `parse_inline`, as opposed to the
+// `hoedown_document` struct whose fields are inherited when the parser recurses.
+// `inline_data` stores the nesting stack (more on that later) and some other
+// flags needed to prevent abuse through malicious input.
+//
+// `set_inline_chars` is also implemented, which associates inline char
+// triggers to their characters depending on the enabled features. It's called
+// by the main constructor.
+//
+// ### Nesting
+//
+// There are two ways to implement nesting in inline parsing. The first one
+// is to use the so called "nesting stack", which allows for lowest-priority
+// lightweight nesting that never backtracks (example below).
+//
+// The second way is to call `parse_inline` and optionally pass a delimiter
+// at which `parse_inline` should stop parsing if it's not consumed by any
+// char trigger. Because you'll probably backtrack if the delimiter is not
+// found, you need to take several measures or the parser will block with
+// malicious input that abuses nesting. See for example `parse_link`.
+//
+// ### Nesting stack example
+//
+// Instead of recursing when a nesting construct (such as emphasis) is being
+// parsed, the approach is to add an entry to the so called "nesting stack",
+// and replace `doc->inline_data->target` with a brand new target, where the
+// next content will be parsed.
+//
+// As an example, imagine this input:
+//
+//     `code`*`inside`*`more`
+//
+// This would be the state of `doc->inline_data` before calling
+// `parse_emphasis` to parse the opening bracket:
+//
+//     target: <target A> (code span "code")
+//
+//     nesting: NULL
+//
+// `doc->inline_data` after parsing the first `*`:
+//
+//     target: <target B> (no nodes)
+//
+//     nesting:
+//       parent: <target A> (code span "code")
+//       delimiter: '*'
+//       start: 8
+//       end: 9
+//
+//       previous: NULL
+//
+// Then, before calling `parse_emphasis` to parse the second `*`:
+//
+//     target: <target B> (code span "inside")
+//
+//     nesting:
+//       parent: <target A> (code span "code")
+//       delimiter: '*'
+//       start: 8
+//       end: 9
+//
+//       previous: NULL
+//
+// `parse_emphasis` will then render the emphasis using <target B> as contents.
+// This will be `doc->inline_data` after `parse_emphasis` finishes:
+//
+//     target: <target A> (code span "inside"; emphasis)
+//
+//     nesting: NULL
+//
+// Just after exiting, `doc->inline_data` would look like:
+//
+//     target: <target A> (code span "inside"; emphasis; code span "more")
+//
+//     nesting: NULL
+//
+// In case a closing `*` wasn't found, nesting entries would be *discarded*
+// by merging the current target (target B in this case) into the entry
+// `parent` target (target A), after rendering the data `start..end` range
+// as a string.
 
-  //FIXME: SOFT_LINEBREAK
-
-  if (tail == start && head == start + 1) return 0;
-  parse_string(doc, target, data + parsed, tail - parsed);
-  parse_string(doc, target, (const uint8_t *)"\n", 1);
-  return head;
-}
-
-static size_t char_angle_bracket(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static inline size_t parse_single_inline(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t result;
+  inline_char_entry *entry;
 
-  if (doc->ft & HOEDOWN_FT_URI_AUTOLINK &&
-      (result = parse_uri_autolink(doc, target, data, parsed, start, size)))
-    return result;
-
-
-  if (!(doc->ft & HOEDOWN_FT_HTML)) return 0;
-
-  const uint8_t *cur_data = data + start;
-  size_t cur_size = size - start;
-
-  if (
-        (result = html_parse_start_tag(NULL, cur_data, cur_size)) ||
-        (result = html_parse_end_tag(NULL, cur_data, cur_size)) ||
-        (result = html_parse_comment(cur_data, cur_size)) ||
-        (result = parse_cdata(cur_data, cur_size)) ||
-        (result = parse_processing_instruction(cur_data, cur_size)) ||
-        (result = parse_declaration(cur_data, cur_size))
-      ) {
-    parse_string(doc, target, data + parsed, start - parsed);
-    hoedown_buffer html = {(uint8_t *)cur_data, result, 0, 0, NULL, NULL};
-    doc->rndr.html(target, &html, &doc->data);
-    return start + result;
+  // Call char triggers in order
+  for (entry = doc->inline_chars[data[start]]; entry; entry = entry->next) {
+    result = entry->trigger(doc, target, data, parsed, start, size);
+    if (result) return result;
   }
 
   return 0;
 }
 
-static size_t char_backtick(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  return parse_code_span(doc, target, data, parsed, start, size);
-}
-
-static size_t char_ampersand(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  size_t i = start + 1;
-
-  hoedown_buffer *character = hoedown_pool_get(&doc->buffers_inline);
-  character->size = 0;
-  i += hoedown_unescape_entity(character, data + i, size - i);
-
-  if (i > start + 1) {
-    parse_string(doc, target, data + parsed, start - parsed);
-
-    doc->rndr.entity(target, character, &doc->data);
-    hoedown_pool_pop(&doc->buffers_inline, character);
-    return i;
-  }
-
-  hoedown_pool_pop(&doc->buffers_inline, character);
-  return 0;
-}
-
-static size_t char_star(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  return parse_emphasis(doc, target, data, parsed, start, size);
-}
-
-static size_t char_underscore(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  return parse_emphasis(doc, target, data, parsed, start, size);
-}
-
-static size_t char_square_bracket(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  return parse_brackets(doc, target, data, parsed, start, size);
-}
-
-
-static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *data, size_t size, uint8_t delimiter, delimiter_check check, void *opaque) {
-  if (doc->current_nesting > doc->max_nesting) return size;
+static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *data, size_t size, uint8_t delimiter) {
+  if (doc->current_nesting >= doc->max_nesting) return size;
   doc->current_nesting++;
 
-  size_t i = 0, result, parsed = 0;
-  char_trigger *active_chars = doc->active_chars;
-
-  // Save current state of the emphasis stack
-  void **current_target = doc->emphasis_stack.current_target;
-  doc->emphasis_stack.current_target = &target;
-  size_t emphasis_size = doc->emphasis_stack.initial_size;
-  doc->emphasis_stack.initial_size = doc->emphasis_stack.size;
+  size_t i = 0, parsed = 0, result;
+  inline_char_entry **inline_chars = doc->inline_chars;
+  open_inline_data(doc, target, data);
 
   while (i < size) {
-    // Skip any chars we're not interested in
-    if (delimiter) {
-      while (i < size && active_chars[data[i]] == NULL && data[i] != delimiter) i++;
-      if (i < size && data[i] == delimiter) {
-        // We found the delimiter we were looking for!
-        if (!check || check(doc, data, parsed, i, size, opaque)) break;
-      }
-    } else {
-      while (i < size && active_chars[data[i]] == NULL) i++;
-    }
-
+    // Optimization: Skip any chars we're not interested in
+    if (delimiter)
+      while (i < size && inline_chars[data[i]] == NULL && data[i] != delimiter) i++;
+    else
+      while (i < size && inline_chars[data[i]] == NULL) i++;
     if (i >= size) break;
 
-    // Call the char trigger, see if we can parse something here
-    if (active_chars[data[i]] && (result = active_chars[data[i]](doc, target, data, parsed, i, size))) {
-      parsed = i = result;
+    // Try to parse a construct here
+    if ((result = parse_single_inline(doc, doc->inline_data->target, data, parsed, i, size))) {
+      i = parsed = result;
       continue;
     }
 
-    // Okay, skip this character and move on
+    // Is this the delimiter we were looking for?
+    if (delimiter && data[i] == delimiter) break;
+
+    // Nothing could be parsed here, skip to the next char
     i++;
   }
 
-  // Close any remaining emphasis and return stack to previous state
-  while (doc->emphasis_stack.size > doc->emphasis_stack.initial_size)
-    discard_emphasis(doc, data);
-  doc->emphasis_stack.current_target = current_target;
-  doc->emphasis_stack.initial_size = emphasis_size;
-
   // Parse rest of content as string
+  discard_nestings(doc, NULL);
   parse_string(doc, target, data + parsed, i - parsed);
 
+  close_inline_data(doc, target);
   doc->current_nesting--;
   return i;
 }
 
-static inline void set_active_chars(char_trigger *active_chars, hoedown_features ft) {
-  memset(active_chars, 0, 256 * sizeof(char_trigger *));
+static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
+  if (ft & HOEDOWN_FT_ESCAPE)
+    register_inline_chars(doc, "\\", parse_escape);
 
-  if (ft & (HOEDOWN_FT_ESCAPE | HOEDOWN_FT_MATH | HOEDOWN_FT_HARD_LINEBREAK))
-    active_chars['\\'] = char_escape;
+  if (ft & HOEDOWN_FT_LINEBREAK)
+    register_inline_chars(doc, "\n", parse_linebreak);
 
-  if (ft & (HOEDOWN_FT_LINEBREAK | HOEDOWN_FT_SOFT_LINEBREAK))
-    active_chars['\n'] = char_newline;
+  if (ft & HOEDOWN_FT_HTML)
+    register_inline_chars(doc, "<", parse_html);
 
-  if (ft & (HOEDOWN_FT_HTML | HOEDOWN_FT_URI_AUTOLINK | HOEDOWN_FT_EMAIL_AUTOLINK))
-    active_chars['<'] = char_angle_bracket;
+  if (ft & HOEDOWN_FT_URI_AUTOLINK)
+    register_inline_chars(doc, "<", parse_uri_autolink);
 
-  if (ft & (HOEDOWN_FT_CODE_SPAN))
-    active_chars['`'] = char_backtick;
+  if (ft & HOEDOWN_FT_EMAIL_AUTOLINK)
+    register_inline_chars(doc, "<", parse_email_autolink);
 
-  if (ft & (HOEDOWN_FT_ENTITY))
-    active_chars['&'] = char_ampersand;
+  if (ft & HOEDOWN_FT_CODE_SPAN)
+    register_inline_chars(doc, "`", parse_code_span);
 
-  if (ft & (HOEDOWN_FT_EMPHASIS))
-    active_chars['*'] = char_star;
+  if (ft & HOEDOWN_FT_ENTITY)
+    register_inline_chars(doc, "&", parse_entity);
 
-  if (ft & (HOEDOWN_FT_EMPHASIS))
-    active_chars['_'] = char_underscore;
+  if (ft & HOEDOWN_FT_EMPHASIS)
+    register_inline_chars(doc, "*_", parse_emphasis);
 
-  if (ft & (HOEDOWN_FT_LINK))
-    active_chars['['] = char_square_bracket;
+  if (ft & HOEDOWN_FT_LINK)
+    register_inline_chars(doc, "[", parse_link);
+
+
+  // LOW-PRIORITY FUNCTIONS (register at the very end)
+
+  if (ft & HOEDOWN_FT_LINK)
+    register_inline_chars(doc, "[]", parse_brackets);
+}
+
+
+// Discard inline nestings up to, but *not including*, the passed nesting.
+// The passed nesting MUST belong to the nesting stack when this is called.
+static void discard_nestings(hoedown_document *doc, inline_nesting *top) {
+  inline_data *data = doc->inline_data;
+  inline_nesting *entry;
+
+  // Discard entries until `top` is reached
+  for (entry = data->nesting; entry != top; entry = entry->previous) {
+    parse_string(doc, entry->parent, data->data + entry->parsed, entry->end - entry->parsed);
+    doc->rndr.object_merge(entry->parent, data->target, 1, &doc->data);
+    doc->rndr.object_pop(data->target, 1, &doc->data);
+    data->target = entry->parent;
+    doc->current_nesting--;
+    hoedown_pool_pop(&doc->inline_nesting__pool, entry);
+  }
+
+  data->nesting = top;
+}
+
+// Switch parsing to a new nesting entry, and return it.
+static inline_nesting *open_nesting(hoedown_document *doc, uint8_t delimiter, size_t parsed, size_t start, size_t end) {
+  inline_data *data = doc->inline_data;
+  inline_nesting *entry = hoedown_pool_get(&doc->inline_nesting__pool);
+
+  entry->parent = data->target;
+  entry->delimiter = delimiter;
+  entry->parsed = parsed;
+  entry->start = start;
+  entry->end = end;
+
+  doc->inline_data->target = doc->rndr.object_get(1, &doc->data);
+  assert(doc->current_nesting < doc->max_nesting);
+  doc->current_nesting++;
+  entry->previous = data->nesting;
+  data->nesting = entry;
+  return entry;
+}
+
+// Destroy a nesting entry and switch parsing to its parent.
+static void close_nesting(hoedown_document *doc, inline_nesting *entry) {
+  inline_data *data = doc->inline_data;
+  assert(data->nesting == entry);
+
+  doc->rndr.object_pop(data->target, 1, &doc->data);
+  data->target = entry->parent;
+  doc->current_nesting--;
+  data->nesting = entry->previous;
+  hoedown_pool_pop(&doc->inline_nesting__pool, entry);
 }
 
 
 
-// PUBLIC METHODS & MISC
-// ---------------------
+// PUBLIC METHODS & INITIALIZATION
+// ===============================
 //
-// There it is. The public entry point for rendering. The method prepares the
+// There it is. The exposed API, which includes the constructor, destructor,
+// preprocessing logic, and `hoedown_document_render`. The method prepares the
 // `hoedown_document` struct for a render, calls `parse_block` or
 // `parse_inline` as appropiate, then cleans everything up.
 //
 // Other things can be implemented here, such as exposed internal methods.
-
 
 static inline void restrict_features(const hoedown_renderer *rndr, hoedown_features *ft) {
   hoedown_features not_present = 0;
@@ -2481,8 +2904,6 @@ static inline void restrict_features(const hoedown_renderer *rndr, hoedown_featu
 
   if (!rndr->escape)
     not_present |= HOEDOWN_FT_ESCAPE;
-  if (!rndr->hard_linebreak)
-    not_present |= HOEDOWN_FT_HARD_LINEBREAK;
   if (!rndr->linebreak)
     not_present |= HOEDOWN_FT_LINEBREAK;
   if (!rndr->uri_autolink)
@@ -2504,89 +2925,129 @@ static inline void restrict_features(const hoedown_renderer *rndr, hoedown_featu
   *ft &= ~not_present;
 }
 
+hoedown_document *hoedown_document_new(
+  hoedown_renderer *renderer,
+  hoedown_features features,
+  size_t max_nesting
+) {
+  // Validate parameters
+  restrict_features(renderer, &features);
 
-static inline void expand_tabs(hoedown_buffer *ob, const uint8_t *data, size_t i, size_t size) {
-  size_t mark;
-  size_t isize = ob->size;
-  static const uint8_t *tab = (const uint8_t *)"    ";
+  // Allocate struct
+  hoedown_document *doc = hoedown_malloc(sizeof(hoedown_document));
 
-  while (i < size) {
-    mark = i;
-    while (1) {
-      // Advance until we find a tab, but keep multi-byte characters in mind
-      while (i < size && (data[i] & 0xc0) != 0x80 && data[i] != '\t') i++;
-      if (i >= size || data[i] == '\t') break;
-      // this byte should not be counted
-      i++; isize++;
-    }
+  // Renderer stuff
+  memcpy(&doc->rndr, renderer, sizeof(hoedown_renderer));
+  doc->data.doc = (hoedown_internal *)doc;
+  doc->data.opaque = renderer->opaque;
 
-    hoedown_buffer_put(ob, data + mark, i - mark);
-    if (i >= size) break;
+  // Common parsing
+  doc->ft = features;
+  doc->current_nesting = 0;
+  doc->max_nesting = max_nesting;
 
-    hoedown_buffer_put(ob, tab, 4 - (ob->size - isize) % 4);
-    i++;
-  }
+  // Block parsing
+  hoedown_buffer_pool_init(&doc->block_buffers, 4, 64);
+  memset(&doc->block_chars, 0, sizeof(doc->block_chars));
+  hoedown_pool_init(&doc->block_chars__pool, 4, _new_block_char_entry, _free_pool_item, NULL);
+  set_block_chars(doc, features);
+  doc->mode = NORMAL_PARSING;
+  doc->is_tight = 0;
+
+  // Inline parsing
+  hoedown_buffer_pool_init(&doc->inline_buffers, 8, 64);
+  memset(&doc->inline_chars, 0, sizeof(doc->inline_chars));
+  hoedown_pool_init(&doc->inline_chars__pool, 4, _new_inline_char_entry, _free_pool_item, NULL);
+  set_inline_chars(doc, features);
+  doc->inline_data = NULL;
+  hoedown_pool_init(&doc->inline_data__pool, 2, _new_inline_data, _free_pool_item, NULL);
+  hoedown_pool_init(&doc->inline_nesting__pool, 4, _new_inline_nesting, _free_pool_item, NULL);
+  doc->inside_link = 0;
+  doc->plain_links_forbidden = 0;
+
+  // Marker parsing
+  memset(&doc->link_refs, 0, sizeof(doc->link_refs));
+  hoedown_pool_init(&doc->link_refs__pool, 8, _new_link_ref, _free_pool_item, NULL);
+
+  // Other features: preprocessing
+  doc->text = hoedown_buffer_new(64);
+
+  return doc;
 }
 
-void hoedown_preprocess(hoedown_buffer *ob, const uint8_t *data, size_t size) {
-  size_t i = 0, mark;
-  hoedown_buffer_grow(ob, size);
+void hoedown_document_free(hoedown_document *doc) {
+  if (!doc) return;
 
-  while (1) {
-    mark = i;
-    while (i < size && data[i] != '\n' && data[i] != '\r') i++;
-    expand_tabs(ob, data, mark, i);
+  // Reset the tables
+  reset_block_chars(doc);
+  reset_inline_chars(doc);
 
-    if (i >= size) break;
+  // Free the pools
+  hoedown_pool_uninit(&doc->block_buffers);
+  hoedown_pool_uninit(&doc->block_chars__pool);
+  hoedown_pool_uninit(&doc->inline_buffers);
+  hoedown_pool_uninit(&doc->inline_chars__pool);
+  hoedown_pool_uninit(&doc->inline_data__pool);
+  hoedown_pool_uninit(&doc->inline_nesting__pool);
+  hoedown_pool_uninit(&doc->link_refs__pool);
 
-    if (data[i] == '\r') i++;
-    if (i < size && data[i] == '\n') i++;
-    hoedown_buffer_putc(ob, '\n');
-  }
+  // Other resources
+  hoedown_buffer_free(doc->text);
+
+  free(doc);
 }
+
 
 void *hoedown_document_render(
   hoedown_document *doc,
   const uint8_t *data, size_t size,
   int is_inline, void *request
 ) {
-  // Initialize everything
-  memset(&doc->link_refs_table, 0, sizeof(doc->link_refs_table));
-
   // Preprocess the input
   if (doc->ft & HOEDOWN_FT_PREPROCESS) {
-    hoedown_preprocess(doc->text, data, size);
+    normalize_spacing(doc->text, data, size);
     data = doc->text->data;
     size = doc->text->size;
-    doc->text->size = 0;
   }
 
   // Prepare
   doc->data.request = request;
   doc->rndr.render_start(is_inline, &doc->data);
-
-  // First, parse the markers
-  doc->mode = MARKER_PARSING;
-  if (!is_inline)
-    parse_block(doc, NULL, data, size, size, 0);
+  void *target = doc->rndr.object_get(is_inline, &doc->data);
 
   // Render!
-  doc->mode = NORMAL_PARSING;
-  void *target = doc->rndr.object_get(is_inline, &doc->data);
   if (is_inline)
-    parse_inline(doc, target, data, size, 0, NULL, NULL);
-  else
+    parse_inline(doc, target, data, size, 0);
+  else {
+    doc->mode = MARKER_PARSING;
+    parse_block(doc, NULL, data, size, size, 0);
+    doc->mode = NORMAL_PARSING;
     parse_block(doc, target, data, size, size, 0);
+  }
 
   // Finish & cleanup
-  doc->marker_link_refs.size = 0;
+  void *result = doc->rndr.render_end(target, is_inline, &doc->data);
+
   assert(doc->current_nesting == 0);
-  assert(doc->buffers_block.size == 0);
-  assert(doc->buffers_inline.size == 0);
+  assert(doc->mode == NORMAL_PARSING);
+  assert(doc->block_buffers.size == doc->block_buffers.isize);
+  assert(!doc->is_tight);
+  assert(doc->inline_buffers.size == doc->inline_buffers.isize);
+  assert(doc->inline_data == NULL);
+  assert(doc->inline_data__pool.size == doc->inline_data__pool.isize);
+  assert(doc->inline_nesting__pool.size == doc->inline_nesting__pool.isize);
+  assert(!doc->inside_link);
+  assert(!doc->plain_links_forbidden);
+  pop_link_refs(doc);
+  memset(&doc->link_refs, 0, sizeof(doc->link_refs));
+  assert(doc->link_refs__pool.size == doc->link_refs__pool.isize);
+  doc->text->size = 0;
+  return result;
+}
 
-  assert(doc->emphasis_stack.size == 0);
-  assert(doc->emphasis_stack.initial_size == 0);
-  assert(doc->emphasis_stack.current_target == NULL);
 
-  return doc->rndr.render_end(target, is_inline, &doc->data);
+// Exposed internals & utilities
+
+void hoedown_preprocess(hoedown_buffer *ob, const uint8_t *data, size_t size) {
+  normalize_spacing(ob, data, size);
 }

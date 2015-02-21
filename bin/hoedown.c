@@ -60,12 +60,10 @@ static struct feature_info features_info[] = {
 
   {HOEDOWN_FT_ROLE, "role", "Parse generic role syntax."},
   {HOEDOWN_FT_ESCAPE, "escape", "Parse backslash escapes."},
-  {HOEDOWN_FT_HARD_LINEBREAK, "hard-linebreak", "Parse backslash linebreaks."},
-  {HOEDOWN_FT_LINEBREAK, "linebreak", "Parse two-space linebreaks."},
-  {HOEDOWN_FT_SOFT_LINEBREAK, "soft-linebreak", "Parse newlines as linebreaks."},
+  {HOEDOWN_FT_LINEBREAK, "linebreak", "Cut spaces around lines and parse two-space linebreaks."},
   {HOEDOWN_FT_URI_AUTOLINK, "uri-autolink", "Parse URI autolinks between angle brackets."},
   {HOEDOWN_FT_EMAIL_AUTOLINK, "email-autolink", "Parse email autolinks between angle brackets."},
-  {HOEDOWN_FT_HTML, "html", "Parse inline HTML."},
+  {HOEDOWN_FT_HTML, "inline-html", "Parse inline HTML."},
   {HOEDOWN_FT_ENTITY, "entity", "Parse HTML entities."},
   {HOEDOWN_FT_CODE_SPAN, "code-span", "Parse code spans between backticks."},
   {HOEDOWN_FT_EMPHASIS, "emphasis", "Parse emphasis and strong emphasis."},
@@ -79,7 +77,9 @@ static struct feature_info features_info[] = {
 
   {HOEDOWN_FT_PREPROCESS, "preprocess", "Preprocess the input. Hoedown can give bad results if input is not preprocessed."},
 
-  {HOEDOWN_FT_LINK_IMAGE, "link-image", "Allow links preceded by a bang to be rendered as images."},
+  {HOEDOWN_FT_LINEBREAK_HARD, "linebreak-hard", "Requires --linebreak. Parse backslash-style linebreaks."},
+  {HOEDOWN_FT_LINEBREAK_SOFT, "linebreak-soft", "Requires --linebreak. Parse all newlines as linebreaks."},
+  {HOEDOWN_FT_LINK_IMAGE, "link-image", "Requires --link. Allow links preceded by a bang to be rendered as images."},
   {HOEDOWN_FT_INTRA_EMPHASIS, "intra-emphasis", "Requires --emphasis. Allow underscores between words to be parsed as emphasis."},
   {HOEDOWN_FT_MATH_EXPLICIT, "math-explicit", "Requires --math. Enables parsing $...$ as inline math and restricts $$...$$ to block math."},
 };
