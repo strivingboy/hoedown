@@ -989,7 +989,7 @@ static inline void parse_string(hoedown_document *doc, void *target, const uint8
 }
 
 // data[start] is assumed to be `\\`
-static inline size_t parse_escape(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_escape(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start + 1;
 
   if (i < size && is_punct_ascii(data[i])) {
@@ -1002,7 +1002,7 @@ static inline size_t parse_escape(hoedown_document *doc, void *target, const uin
 }
 
 // data[start] is assumed to be '\n'
-static inline size_t parse_linebreak(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_linebreak(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t tail = start, head = start + 1;
 
   // Rewind on all trailing spaces
@@ -1039,7 +1039,7 @@ static inline size_t parse_linebreak(hoedown_document *doc, void *target, const 
 }
 
 // Assumes data[0] == '`'
-static inline size_t parse_code(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_code(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   if (start > parsed && data[start-1] == '`') return 0;
 
   size_t i = start + 1, content_start, mark;
@@ -1096,7 +1096,7 @@ static inline size_t parse_uri_scheme(const uint8_t *data, size_t size) {
 }
 
 // data[0] is assumed to be '<'
-static inline size_t parse_uri_autolink(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_uri_autolink(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start + 1, mark;
 
   // Collect scheme
@@ -1146,7 +1146,7 @@ static inline size_t parse_email_label__cont(const uint8_t *data, size_t size) {
 }
 
 // data[0] is assumed to be '<'
-static inline size_t parse_email_autolink(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_email_autolink(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start + 1, mark;
 
   // Collect username
@@ -1197,7 +1197,7 @@ static inline size_t parse_link_spec__inline_title(hoedown_document *doc, hoedow
   return i;
 }
 
-static inline size_t parse_link_spec__inline(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+static size_t parse_link_spec__inline(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
   size_t i = start, mark;
 
   // Left parenthesis
@@ -1227,7 +1227,7 @@ static inline size_t parse_link_spec__inline(hoedown_document *doc, link_ref *re
   return i;
 }
 
-static inline size_t parse_link_spec__collapsed(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+static size_t parse_link_spec__collapsed(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
   size_t i = start;
 
   // Optional spacing
@@ -1258,7 +1258,7 @@ static inline size_t parse_link_spec__collapsed(hoedown_document *doc, link_ref 
   return i;
 }
 
-static inline size_t parse_link_spec__full(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
+static size_t parse_link_spec__full(hoedown_document *doc, link_ref *ref, const uint8_t *data, size_t start, size_t size, size_t text_start, size_t text_end) {
   size_t i = start, mark;
 
   // Optional spacing
@@ -1325,7 +1325,7 @@ static inline size_t parse_link_spec(hoedown_document *doc, link_ref *ref, const
 }
 
 // data[start] is assumed to be '['
-static inline size_t parse_link(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_link(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start + 1, mark, content_start, content_end;
   inline_data *inline_data = doc->inline_data;
   int current_inside_link = doc->inside_link, current_forbidden = doc->plain_links_forbidden;
@@ -1395,7 +1395,7 @@ static inline size_t parse_link(hoedown_document *doc, void *target, const uint8
 }
 
 // data[start] is assumed to be '[' or ']'
-static inline size_t parse_brackets(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_brackets(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   // This is only activated in certain contexts, such as inside of
   // a link (both plain and image). It's there to prevent the link
   // of containing unbalanced square brackets.
@@ -1478,7 +1478,7 @@ static inline size_t parse_declaration(hoedown_document *doc, const uint8_t *dat
 }
 
 // data[start] is assumed to be '<'
-static inline size_t parse_html(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_html(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t result;
 
   const uint8_t *cur_data = data + start;
@@ -1502,7 +1502,7 @@ static inline size_t parse_html(hoedown_document *doc, void *target, const uint8
 }
 
 // data[start] is assumed to be '&'
-static inline size_t parse_entity(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_entity(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start + 1;
 
   hoedown_buffer *character = hoedown_pool_get(&doc->inline_buffers);
@@ -1533,7 +1533,7 @@ static inline int can_close_emphasis(hoedown_document *doc, const uint8_t *data,
 }
 
 // data[start] is assumed to be '*' or '_'
-static inline size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   uint8_t delimiter = data[start];
   size_t i = start + 1, mark = start, width;
   int can_open, can_close;
@@ -1624,7 +1624,7 @@ static inline size_t parse_atx_header_end(const uint8_t *data, size_t size) {
   return i;
 }
 
-static inline size_t parse_atx_header(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_atx_header(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark, content_start;
   size_t width;
 
@@ -1669,7 +1669,7 @@ static inline size_t parse_atx_header(hoedown_document *doc, void *target, const
 // Beware! This has to be called at the start of the setext rule (the header's
 // text should be at the line just before start, which shouldn't be included
 // in `parsed`).
-static inline size_t parse_setext_header(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_setext_header(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark, content_start, content_end;
   uint8_t character;
 
@@ -1722,7 +1722,7 @@ static inline size_t parse_setext_header(hoedown_document *doc, void *target, co
   return i;
 }
 
-static inline size_t parse_horizontal_rule(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_horizontal_rule(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start;
   uint8_t character;
   size_t count;
@@ -1772,7 +1772,7 @@ static inline size_t parse_horizontal_rule(hoedown_document *doc, void *target, 
   return i;
 }
 
-static inline size_t parse_indented_code_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_indented_code_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark;
   size_t last_non_empty_line = 0;
   hoedown_buffer *code = hoedown_pool_get(&doc->block_buffers);
@@ -1841,7 +1841,7 @@ static inline size_t parse_code_fence(const uint8_t *data, size_t size, uint8_t 
   return i;
 }
 
-static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_fenced_code_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark;
   size_t indentation, start_width, end_width;
   uint8_t start_character, end_character;
@@ -1936,7 +1936,7 @@ static inline size_t parse_fenced_code_block(hoedown_document *doc, void *target
   return i;
 }
 
-static inline size_t parse_html_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_html_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, content_start, mark;
   // FIXME: Right now this doesn't implement what is in the spec,
   // because of some inconsistencies with the reference parsers.
@@ -2056,7 +2056,7 @@ static inline size_t parse_link_reference_content(hoedown_document *doc, link_re
 }
 
 // Marker parsing method.
-static inline size_t parse_link_reference(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_link_reference(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark;
   hoedown_buffer *label;
   link_ref *ref;
@@ -2207,7 +2207,7 @@ static inline size_t parse_quote_block_content(hoedown_document *doc, void *cont
 }
 
 // This block construct is a container.
-static inline size_t parse_quote_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_quote_block(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, mark;
   hoedown_buffer *work = NULL;
   void *content = NULL;
@@ -2416,7 +2416,7 @@ static size_t collect_list_items(hoedown_document *doc, const uint8_t *data, siz
 // above to parse the list items and collect their contents, and then iterates
 // through `work` and `slices` and renders each individual item, then the list
 // itself.
-static inline size_t parse_list(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t i = start, slice, current_is_tight = doc->is_tight;
   enum parsing_mode current_mode = doc->mode;
   int is_ordered, is_loose = (current_mode == NORMAL_PARSING) ? 0 : 1, number = 0;
