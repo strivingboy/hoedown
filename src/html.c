@@ -5,12 +5,8 @@
 #include <string.h>
 #include <assert.h>
 
-typedef struct renderer_state {
-  hoedown_pool buffers;
-} renderer_state;
-
 static void *object_get(int is_inline, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
+  hoedown_html_renderer_state *state = data->opaque;
   hoedown_buffer *ob = hoedown_pool_get(&state->buffers);
   ob->size = 0;
   return ob;
@@ -22,7 +18,7 @@ static void object_merge(void *target, void *content_, int is_inline, const hoed
 }
 
 static void object_pop(void *target, int is_inline, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
+  hoedown_html_renderer_state *state = data->opaque;
   hoedown_pool_pop(&state->buffers, target);
 }
 
@@ -30,7 +26,7 @@ static void render_start(int is_inline, const hoedown_renderer_data *data) {
 }
 
 static void *render_end(void *target, int is_inline, const hoedown_renderer_data *data) {
-  renderer_state *state = data->opaque;
+  hoedown_html_renderer_state *state = data->opaque;
   hoedown_pool_detach(&state->buffers, target);
 
   assert(state->buffers.size == state->buffers.isize);
@@ -288,7 +284,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
   };
 
   hoedown_renderer *rndr = hoedown_malloc(sizeof(hoedown_renderer));
-  renderer_state *state = hoedown_malloc(sizeof(renderer_state));
+  hoedown_html_renderer_state *state = hoedown_malloc(sizeof(hoedown_html_renderer_state));
 
   memcpy(rndr, &temp, sizeof(hoedown_renderer));
   rndr->opaque = state;
@@ -301,7 +297,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
 void hoedown_html_renderer_free(hoedown_renderer *rndr) {
   if (!rndr) return;
 
-  renderer_state *state = rndr->opaque;
+  hoedown_html_renderer_state *state = rndr->opaque;
   hoedown_pool_uninit(&state->buffers);
   free(state);
 

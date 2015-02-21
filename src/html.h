@@ -12,18 +12,14 @@ extern "C" {
 #endif
 
 
-/*************
- * CONSTANTS *
- *************/
-
-//TODO
-
-
 /*********
  * TYPES *
  *********/
 
-//TODO
+typedef struct hoedown_html_renderer_state {
+  void *opaque;
+  hoedown_pool buffers;
+} hoedown_html_renderer_state;
 
 
 /*************
