@@ -15,48 +15,50 @@ extern "C" {
  * CONSTANTS *
  *************/
 
-typedef enum hoedown_features {
-  /* Block constructs */
-  HOEDOWN_FT_DIRECTIVE = (1 << 0),
-  HOEDOWN_FT_INDENTED_CODE_BLOCK = (1 << 1),
-  HOEDOWN_FT_FENCED_CODE_BLOCK = (1 << 2),
-  HOEDOWN_FT_HORIZONTAL_RULE = (1 << 3),
-  HOEDOWN_FT_ATX_HEADER = (1 << 4),
-  HOEDOWN_FT_SETEXT_HEADER = (1 << 5),
-  HOEDOWN_FT_LIST = (1 << 8),
-  HOEDOWN_FT_QUOTE_BLOCK = (1 << 31),
-  HOEDOWN_FT_HTML_BLOCK = (1 << 6),
-  HOEDOWN_FT_TABLE = (1 << 7),
+/* FEATURE FLAGS */
 
-  /* Inline constructs */
-  HOEDOWN_FT_ROLE = (1 << 9),
-  HOEDOWN_FT_ESCAPE = (1 << 10),
-  HOEDOWN_FT_LINEBREAK = (1 << 12),
-  HOEDOWN_FT_URI_AUTOLINK = (1 << 14),
-  HOEDOWN_FT_EMAIL_AUTOLINK = (1 << 15),
-  HOEDOWN_FT_HTML = (1 << 16),
-  HOEDOWN_FT_ENTITY = (1 << 17),
-  HOEDOWN_FT_CODE_SPAN = (1 << 18),
-  HOEDOWN_FT_EMPHASIS = (1 << 19),
-  HOEDOWN_FT_LINK = (1 << 20),
-  HOEDOWN_FT_MATH = (1 << 22),
-  HOEDOWN_FT_SUPERSCRIPT = (1 << 23),
-  HOEDOWN_FT_QUOTE = (1 << 24),
-  HOEDOWN_FT_STRIKETHROUGH = (1 << 25),
-  HOEDOWN_FT_HIGHLIGHT = (1 << 26),
-  HOEDOWN_FT_FOOTNOTE = (1 << 27),
+/* Block constructs */
+#define HOEDOWN_FT_DIRECTIVE (1l << 0)
+#define HOEDOWN_FT_INDENTED_CODE_BLOCK (1l << 1)
+#define HOEDOWN_FT_FENCED_CODE_BLOCK (1l << 2)
+#define HOEDOWN_FT_HORIZONTAL_RULE (1l << 3)
+#define HOEDOWN_FT_ATX_HEADER (1l << 4)
+#define HOEDOWN_FT_SETEXT_HEADER (1l << 5)
+#define HOEDOWN_FT_LIST (1l << 8)
+#define HOEDOWN_FT_QUOTE_BLOCK (1l << 31)
+#define HOEDOWN_FT_HTML_BLOCK (1l << 6)
+#define HOEDOWN_FT_TABLE (1l << 7)
 
-  /* Other features */
-  HOEDOWN_FT_PREPROCESS = (1 << 28),
+/* Inline constructs */
+#define HOEDOWN_FT_ROLE (1l << 9)
+#define HOEDOWN_FT_ESCAPE (1l << 10)
+#define HOEDOWN_FT_LINEBREAK (1l << 12)
+#define HOEDOWN_FT_URI_AUTOLINK (1l << 14)
+#define HOEDOWN_FT_EMAIL_AUTOLINK (1l << 15)
+#define HOEDOWN_FT_HTML (1l << 16)
+#define HOEDOWN_FT_ENTITY (1l << 17)
+#define HOEDOWN_FT_CODE_SPAN (1l << 18)
+#define HOEDOWN_FT_EMPHASIS (1l << 19)
+#define HOEDOWN_FT_LINK (1l << 20)
+#define HOEDOWN_FT_MATH (1l << 22)
+#define HOEDOWN_FT_SUPERSCRIPT (1l << 23)
+#define HOEDOWN_FT_QUOTE (1l << 24)
+#define HOEDOWN_FT_STRIKETHROUGH (1l << 25)
+#define HOEDOWN_FT_HIGHLIGHT (1l << 26)
+#define HOEDOWN_FT_FOOTNOTE (1l << 27)
 
-  /* Flags */
-  HOEDOWN_FT_LINEBREAK_HARD = (1 << 11),
-  HOEDOWN_FT_LINEBREAK_SOFT = (1 << 13),
-  HOEDOWN_FT_LINK_IMAGE = (1 << 21),
-  HOEDOWN_FT_INTRA_EMPHASIS = (1 << 29),
-  HOEDOWN_FT_MATH_EXPLICIT = (1 << 30),
-} hoedown_features;
+/* Other features */
+#define HOEDOWN_FT_PREPROCESS (1l << 62)
 
+/* Flags */
+#define HOEDOWN_FT_LINEBREAK_HARD (1l << 11)
+#define HOEDOWN_FT_LINEBREAK_SOFT (1l << 13)
+#define HOEDOWN_FT_LINK_IMAGE (1l << 21)
+#define HOEDOWN_FT_INTRA_EMPHASIS (1l << 29)
+#define HOEDOWN_FT_MATH_EXPLICIT (1l << 30)
+
+
+/* FEATURE GROUPS */
 
 #define HOEDOWN_FT_BLOCK (\
   HOEDOWN_FT_DIRECTIVE |\
@@ -103,9 +105,7 @@ typedef enum hoedown_features {
 0)
 
 
-/***********
- * PRESETS *
- ***********/
+/* FEATURE PRESETS */
 
 #define HOEDOWN_FT_COMMONMARK (\
   HOEDOWN_FT_INDENTED_CODE_BLOCK |\
@@ -162,6 +162,8 @@ typedef enum hoedown_features {
 /*********
  * TYPES *
  *********/
+
+typedef uint64_t hoedown_features;
 
 typedef struct hoedown_document hoedown_document;
 
