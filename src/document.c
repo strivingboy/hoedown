@@ -978,6 +978,23 @@ static inline size_t parse_link_label(hoedown_buffer *label, const uint8_t *data
   }
 }
 
+static inline int is_left_flanking(const uint8_t *data, size_t start, size_t end, size_t size) {
+  //FIXME: remove this when targeted CommonMark has good definitions (jgm/CommonMark#310)
+  //FIXME: check for Unicode whitespace / punctuation
+  if (end >= size || is_space(data[end])) return 0;
+  if (!(end < size && is_punct_ascii(data[end]))) return 1;
+  if (start == 0 || is_space(data[start-1]) || is_punct_ascii(data[start-1])) return 1;
+  return 0;
+}
+
+static inline int is_right_flanking(const uint8_t *data, size_t start, size_t end, size_t size) {
+  //FIXME: check for Unicode whitespace / punctuation
+  if (start == 0 || is_space(data[start-1])) return 0;
+  if (!(start > 0 && is_punct_ascii(data[start-1]))) return 1;
+  if (end >= size || is_space(data[end]) || is_punct_ascii(data[end])) return 1;
+  return 0;
+}
+
 
 // INLINE PARSING
 
@@ -1520,22 +1537,11 @@ static size_t parse_entity(hoedown_document *doc, void *target, const uint8_t *d
   return 0;
 }
 
-static inline int can_open_emphasis(hoedown_document *doc, const uint8_t *data, size_t parsed, size_t start, size_t size, uint8_t delimiter, size_t i) {
-  if (i >= size || is_space(data[i])) return 0;
-  if (delimiter == '_' && !(doc->ft & HOEDOWN_FT_INTRA_EMPHASIS) && start > parsed && is_alnum_ascii(data[start-1])) return 0;
-  return 1;
-}
-
-static inline int can_close_emphasis(hoedown_document *doc, const uint8_t *data, size_t parsed, size_t start, size_t size, uint8_t delimiter, size_t i) {
-  if (start > parsed && is_space(data[start-1])) return 0;
-  if (delimiter == '_' && !(doc->ft & HOEDOWN_FT_INTRA_EMPHASIS) && i < size && is_alnum_ascii(data[i])) return 0;
-  return 1;
-}
-
 // data[start] is assumed to be '*' or '_'
 static size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   uint8_t delimiter = data[start];
   size_t i = start + 1, mark = start, width;
+  int no_intra = !(doc->ft & HOEDOWN_FT_INTRA_EMPHASIS);
   int can_open, can_close;
   inline_nesting *entry;
 
@@ -1544,8 +1550,9 @@ static size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t 
   while (i < size && data[i] == delimiter) i++;
 
   if (i - mark > 2 * doc->max_nesting) return 0;
-  can_open = can_open_emphasis(doc, data, parsed, start, size, delimiter, i);
-  can_close = can_close_emphasis(doc, data, parsed, start, size, delimiter, i);
+  can_open = is_left_flanking(data, start, i, size);
+  can_close = is_right_flanking(data, start, i, size);
+  if (delimiter == '_' && no_intra && can_open && can_close) return 0;
 
   // Try to close as many emphasis as possible with this delimiter
   if (can_close) {
