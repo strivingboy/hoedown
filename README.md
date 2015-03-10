@@ -1,77 +1,85 @@
 Hoedown
 =======
 
-> **Important:** this is the upcoming Hoedown v4 codebase, and is in pre-alpha!
-> Don't use it for production yet, get one of the stable 3.x [releases](https://github.com/hoedown/hoedown/tags) instead.  
-
-[![Build Status](https://travis-ci.org/hoedown/hoedown.png?branch=master)](https://travis-ci.org/hoedown/hoedown)
+[![Build Status](https://travis-ci.org/hoedown/hoedown.png?branch=develop)](https://travis-ci.org/hoedown/hoedown)
 
 `Hoedown` is a revived fork of [Sundown](https://github.com/vmg/sundown),
 the Markdown parser based on the original code of the
 [Upskirt library](http://fossil.instinctive.eu/libupskirt/index)
 by Natacha Porté.
 
+This branch has the code for version 4, in which `Hoedown` has been rewritten
+and is now targeting [CommonMark](http://commonmark.org) officially.
+
+> **Important:** this code is in pre-alpha! Don't use it for production yet.
+> The section below doesn't fully reflect the current features, but rather
+> the goals for the final release.
+
+
 Features
 --------
 
-*	**Fully standards compliant**
+  - **Standards compliant**
 
-	`Hoedown` passes out of the box the official Markdown v1.0.0 and v1.0.3
-	test suites, and has been extensively tested with additional corner cases
-	to make sure its output is as sane as possible at all times.
+    `Hoedown` follows the CommonMark spec and is tested against it.
+    It's entirely compliant except for some
+    [differences](https://github.com/hoedown/hoedown/wiki/Spec-differences)
+    needed mostly to guarantee security.
 
-*	**Massive extension support**
+  - **Fast and efficient**
 
-	`Hoedown` has optional support for several (unofficial) Markdown extensions,
-	such as non-strict emphasis, fenced code blocks, tables, autolinks,
-	strikethrough and more.
+    `Hoedown` has been written with speed in mind; it reuses memory, operates
+    without an intermediate AST and renders at the same time, among other things.
 
-*	**UTF-8 aware**
+    `Hoedown` is 72% faster than CMark (the reference C99 implementation) when
+    rendering the CommonMark spec a thousand times.
 
-	`Hoedown` is fully UTF-8 aware, both when parsing the source document and when
-	generating the resulting (X)HTML code.
+  - **Portable and zero-dependency**
 
-*	**Tested & Ready to be used on production**
+    `Hoedown` is a zero-dependency library composed of some `.c` files and their
+    headers. No dependencies, no bullshit. Only standard C89 that builds everywhere.
 
-	`Hoedown` has been extensively security audited, and includes protection against
-	all possible DOS attacks (stack overflows, out of memory situations, malformed
-	Markdown syntax...).
+  - **Increased flexibility**
 
-	We've worked very hard to make `Hoedown` never leak or crash under *any* input.
+    `Hoedown` supports (unofficial) CommonMark extensions such as tables, math,
+    footnotes, and more! The new version gives even more control, allowing you
+    to enable or disable every single construct, not just extensions, at runtime.
 
-	**Warning**: `Hoedown` doesn't validate or post-process the HTML in Markdown documents.
-	Unless you use `HTML_ESCAPE` or `HTML_SKIP`, you should strongly consider using a
-	good post-processor in conjunction with Hoedown to prevent client-side attacks.
+  - **Customizable renderers**
 
-*	**Customizable renderers**
+    `Hoedown` is not stuck with HTML, renderers can output anything: TeX code,
+    an AST tree, statistics about the parsed document, binary data, etc.
+    Parsing is completely decoupled from rendering.
 
-	`Hoedown` is not stuck with XHTML output: the Markdown parser of the library
-	is decoupled from the renderer, so it's trivial to extend the library with
-	custom renderers. A fully functional (X)HTML renderer is included.
+  - **Precise source mapping**
 
-*	**Optimized for speed**
+    `Hoedown` is more than a parser. It has character-level source mapping, both
+    direct and indirect, which is also present at inline constructs. This allows
+    for a variety of creative uses, see [the recipes](https://github.com/hoedown/hoedown/wiki).
 
-	`Hoedown` is written in C, with a special emphasis on performance. When wrapped
-	on a dynamic language such as Python or Ruby, it has shown to be up to 40
-	times faster than other native alternatives.
+  - **Safe for production**
 
-*	**Zero-dependency**
+    `Hoedown` includes protection against possible attacks like out of memory
+    situations, malformed syntax and extensive nesting. We've worked very hard
+    to make `Hoedown` never leak, crash, loop or block under *any* input.
 
-	`Hoedown` is a zero-dependency library composed of some `.c` files and their
-	headers. No dependencies, no bullshit. Only standard C99 that builds everywhere.
+    **Warning**: `Hoedown` doesn't validate HTML found in Markdown documents.
+    Unless you disable HTML parsing entirely, you should always feed the
+    rendered HTML to [Lanli](https://github.com/hoedown/lanli) or another
+    sanitizer.
 
-*	**Additional features**
+  - **Unicode aware**
 
-	`Hoedown` comes with a fully functional implementation of SmartyPants,
-	a separate autolinker, escaping utilities, buffers and stacks.
+    `Hoedown` is fully UTF-8 aware, both when parsing the source document and when
+    generating the resulting HTML.
+
 
 Bindings
 --------
 
 You can see a community-maintained list of `Hoedown` bindings at
-[the wiki](https://github.com/hoedown/hoedown/wiki/Bindings). There is also a
-[migration guide](https://github.com/hoedown/hoedown/wiki/Migration-Guide)
-available for authors of Sundown bindings.
+[the wiki](https://github.com/hoedown/hoedown/wiki/Bindings).
+
 
 Help us
 -------
@@ -82,26 +90,14 @@ emailing the private [Hoedown Security](mailto:hoedown-security@googlegroups.com
 mailing list. The `Hoedown` security team will review the vulnerability and work with you
 to reproduce and resolve it.
 
-Unicode character handling
---------------------------
-
-Given that the Markdown spec makes no provision for Unicode character handling, `Hoedown`
-takes a conservative approach towards deciding which extended characters trigger Markdown
-features:
-
-*	Punctuation characters outside of the U+007F codepoint are not handled as punctuation.
-	They are considered as normal, in-word characters for word-boundary checks.
-
-*	Whitespace characters outside of the U+007F codepoint are not considered as
-	whitespace. They are considered as normal, in-word characters for word-boundary checks.
 
 Install
 -------
 
-Just typing `make` will build `Hoedown` into a dynamic library and create the `hoedown`
-and `smartypants` executables, which are command-line tools to render Markdown to HTML
-and perform SmartyPants, respectively.
+To build the library and executable, use [CMake](http://cmake.org):
 
-If you are using [CocoaPods](http://cocoapods.org), just add the line `pod 'hoedown'` to your Podfile and call `pod install`.
+    cmake -D CMAKE_BUILD_TYPE=Release .
+    cmake --build .
 
-Or, if you prefer, you can just throw the files at `src` into your project.
+Or just drop the files at `src` into your project.
+Hoedown doesn't have any special building requeriments.
