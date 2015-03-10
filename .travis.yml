@@ -2,6 +2,6 @@ language: c
 compiler:
   - clang
   - gcc
-perl:
-  - "5.12"
+install:
+  - sudo apt-get -qq install python3
 script: cmake . && make test
