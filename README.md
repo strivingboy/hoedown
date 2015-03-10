@@ -31,8 +31,9 @@ Features
     `Hoedown` has been written with speed in mind; it reuses memory, operates
     without an intermediate AST and renders at the same time, among other things.
 
-    `Hoedown` is 72% faster than CMark (the reference C99 implementation) when
-    rendering the CommonMark spec a thousand times.
+    `Hoedown` renders at 145% the speed of CMark (the reference C99 implementation)
+    at the time of writing. We tested many documents: this README, the spec,
+    John's syntax page, etc.
 
   - **Portable and zero-dependency**
 
