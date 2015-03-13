@@ -48,6 +48,7 @@ extern "C" {
 #define HOEDOWN_FT_HIGHLIGHT (1l << 26)
 #define HOEDOWN_FT_SIDENOTE (1l << 32)
 #define HOEDOWN_FT_EMOJI (1l << 33)
+#define HOEDOWN_FT_TYPOGRAPHY (1l << 34)
 
 /* Other features */
 #define HOEDOWN_FT_PREPROCESS (1l << 62)
@@ -94,6 +95,7 @@ extern "C" {
   HOEDOWN_FT_HIGHLIGHT |\
   HOEDOWN_FT_SIDENOTE |\
   HOEDOWN_FT_EMOJI |\
+  HOEDOWN_FT_TYPOGRAPHY |\
 0)
 
 #define HOEDOWN_FT_OTHER (\
@@ -206,6 +208,7 @@ typedef struct hoedown_renderer {
   void (*emphasis)(void *target, void *content, size_t width, uint8_t delimiter, const hoedown_renderer_data *data);
   void (*link)(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data);
   void (*math)(void *target, const hoedown_buffer *math, int is_inline, const hoedown_renderer_data *data);
+  void (*typography)(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data);
 
   /* Global callbacks (mandatory) */
   void *(*object_get)(int is_inline, const hoedown_renderer_data *data);

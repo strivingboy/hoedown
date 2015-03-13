@@ -1682,6 +1682,61 @@ static size_t parse_math(hoedown_document *doc, void *target, const uint8_t *dat
   return i + end.size;
 }
 
+// data[start] is assumed to be '"' or '-'
+static size_t parse_typography_quote(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t end = start + 1;
+  int left_flanking = is_left_flanking(data, start, end, size);
+  int right_flanking = is_right_flanking(data, start, end, size);
+  if (left_flanking == right_flanking) return 0;
+
+  parse_string(doc, target, data + parsed, start - parsed);
+  hoedown_buffer character = {
+    (uint8_t *)((data[start] == '"')
+      ? (left_flanking ? "“" : "”")
+      : (left_flanking ? "‘" : "‘")
+    ), 3, 0, 0, NULL, NULL
+  };
+  doc->rndr.typography(target, &character, &doc->data);
+  return end;
+}
+
+// data[start] is assumed to be '-'
+static size_t parse_typography_dash(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t end = start + 2;
+  if (end > size || data[start+1] != '-') return 0;
+
+  parse_string(doc, target, data + parsed, start - parsed);
+  hoedown_buffer character = {(uint8_t *) "–", 3, 0, 0, NULL, NULL};
+  if (end < size && data[end] == '-') {
+    character.data = (uint8_t *) "—";
+    end++;
+  }
+  doc->rndr.typography(target, &character, &doc->data);
+  return end;
+}
+
+// data[start] is assumed to be '.'
+static size_t parse_typography_ellipsis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t end = start + 3;
+  if (end > size || data[start+1] != '.' || data[start+2] != '.') return 0;
+
+  parse_string(doc, target, data + parsed, start - parsed);
+  hoedown_buffer character = {(uint8_t *) "…", 3, 0, 0, NULL, NULL};
+  doc->rndr.typography(target, &character, &doc->data);
+  return end;
+}
+
+// data[start] is assumed to be '('
+static size_t parse_typography_copyright(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t end = start + 3;
+  if (end > size || data[start+2] != ')' || (data[start+1] != 'c' && data[start+1] != 'C')) return 0;
+
+  parse_string(doc, target, data + parsed, start - parsed);
+  hoedown_buffer character = {(uint8_t *) "©", 3, 0, 0, NULL, NULL};
+  doc->rndr.typography(target, &character, &doc->data);
+  return end;
+}
+
 
 // BLOCK PARSING
 
@@ -2913,6 +2968,13 @@ static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
   if (ft & HOEDOWN_FT_LINK)
     register_inline_chars(doc, "[", parse_link);
 
+  if (ft & HOEDOWN_FT_TYPOGRAPHY) {
+    register_inline_chars(doc, "'\"", parse_typography_quote);
+    register_inline_chars(doc, "-", parse_typography_dash);
+    register_inline_chars(doc, ".", parse_typography_ellipsis);
+    register_inline_chars(doc, "(", parse_typography_copyright);
+  }
+
 
   // LOW-PRIORITY FUNCTIONS (register at the very end)
 
@@ -3023,6 +3085,8 @@ static inline void restrict_features(const hoedown_renderer *rndr, hoedown_featu
     not_present |= HOEDOWN_FT_LINK;
   if (!rndr->math)
     not_present |= HOEDOWN_FT_MATH;
+  if (!rndr->typography)
+    not_present |= HOEDOWN_FT_TYPOGRAPHY;
 
   // Remove not present features from *ft
   *ft &= ~not_present;

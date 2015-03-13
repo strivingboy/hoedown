@@ -26,6 +26,7 @@ static void rndr_code(void *target, const hoedown_buffer *code, const hoedown_re
 static void rndr_emphasis(void *target, void *content, size_t width, uint8_t delimiter, const hoedown_renderer_data *data) {}
 static void rndr_link(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data) {}
 static void rndr_math(void *target, const hoedown_buffer *math, int is_inline, const hoedown_renderer_data *data) {}
+static void rndr_typography(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data) {}
 
 /* Global callbacks */
 static void *object_get(int is_inline, const hoedown_renderer_data *data) { return NULL; }
@@ -63,6 +64,7 @@ hoedown_renderer *hoedown_noop_renderer_new() {
     rndr_emphasis,
     rndr_link,
     rndr_math,
+    rndr_typography,
 
     object_get,
     object_merge,
