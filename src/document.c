@@ -860,7 +860,7 @@ static size_t html_parse_comment(const uint8_t *data, size_t size) {
 //
 // Some auxiliary parsing functions are suffixed `__` and a word. This is
 // to indincate that they are private, only meant to be called by the function
-// with the unprefixed name.
+// with the unsuffixed name.
 
 
 // These are defined later
@@ -1405,6 +1405,7 @@ static size_t parse_link(hoedown_document *doc, void *target, const uint8_t *dat
 
   // Render!
   parse_string(doc, target, data + parsed, start - parsed);
+
   doc->rndr.link(target, content, ref->dest, ref->has_title ? ref->title : NULL, is_image, &doc->data);
   hoedown_pool_pop(&doc->link_refs__pool, ref);
   doc->rndr.object_pop(content, 1, &doc->data);
@@ -1510,6 +1511,7 @@ static size_t parse_html(hoedown_document *doc, void *target, const uint8_t *dat
     (result = parse_declaration(doc, cur_data, cur_size))
   ) {
     parse_string(doc, target, data + parsed, start - parsed);
+
     hoedown_buffer html = {(uint8_t *)cur_data, result, 0, 0, NULL, NULL};
     doc->rndr.html(target, &html, &doc->data);
     return start + result;
@@ -1528,6 +1530,7 @@ static size_t parse_entity(hoedown_document *doc, void *target, const uint8_t *d
 
   if (i > start + 1) {
     parse_string(doc, target, data + parsed, start - parsed);
+
     doc->rndr.entity(target, character, &doc->data);
     hoedown_pool_pop(&doc->inline_buffers, character);
     return i;
