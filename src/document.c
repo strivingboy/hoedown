@@ -71,6 +71,10 @@ typedef struct inline_data {
   int cdata_not_found;
   int instruction_not_found;
   int declaration_not_found;
+  int latex_inline_math_not_found;
+  int latex_block_math_not_found;
+  int tex_inline_math_not_found;
+  int tex_block_math_not_found;
 } inline_data;
 
 typedef struct link_ref {
@@ -285,6 +289,10 @@ static inline void open_inline_data(hoedown_document *doc, void *target, const u
   inline_data->cdata_not_found = 0;
   inline_data->instruction_not_found = 0;
   inline_data->declaration_not_found = 0;
+  inline_data->latex_inline_math_not_found = 0;
+  inline_data->latex_block_math_not_found = 0;
+  inline_data->tex_inline_math_not_found = 0;
+  inline_data->tex_block_math_not_found = 0;
 }
 
 static inline void close_inline_data(hoedown_document *doc, void *target) {
@@ -1594,6 +1602,86 @@ static size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t 
   return mark > start ? mark : 0;
 }
 
+// Should only be called from parse_math. `end` is assumed to be uninitialized.
+// `is_inline` may not be updated if the type is to be autodetected.
+// `data` is assumed to start with `$` or `\\`.
+static inline size_t parse_math__delimiter(hoedown_document *doc, const uint8_t *data, size_t size, hoedown_buffer *end, int *is_inline, int **not_found) {
+  if (data[0] == '\\') {
+    if (size < 3 || data[1] != '\\') return 0;
+
+    // LaTeX style
+    if (data[2] == '(') {
+      end->data = (uint8_t *) "\\\\)";
+      end->size = 3;
+      *is_inline = 1;
+      *not_found = &doc->inline_data->latex_inline_math_not_found;
+      return 3;
+    }
+    if (data[2] == '[') {
+      end->data = (uint8_t *) "\\\\]";
+      end->size = 3;
+      *is_inline = 0;
+      *not_found = &doc->inline_data->latex_block_math_not_found;
+      return 3;
+    }
+    return 0;
+  }
+
+  if (data[1] == '$') {
+    // TeX style, two dollars
+    end->data = (uint8_t *) "$$";
+    end->size = 2;
+    if (doc->ft & HOEDOWN_FT_MATH_EXPLICIT) *is_inline = 0;
+    *not_found = &doc->inline_data->tex_block_math_not_found;
+    return 2;
+  }
+
+  // TeX style, one dollar
+  if (!(doc->ft & HOEDOWN_FT_MATH_EXPLICIT)) return 0;
+  end->data = (uint8_t *) "$";
+  end->size = 1;
+  *is_inline = 1;
+  *not_found = &doc->inline_data->tex_inline_math_not_found;
+  return 1;
+}
+
+// data[start] is assumed to be '\\' or '$'
+static size_t parse_math(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t i = start, mark;
+  hoedown_buffer end = {NULL, 0, 0, 0, NULL, NULL};
+  int is_inline = 9, *not_found = NULL;
+
+  // Parse starting delimiter, determine span type and ending
+  i += parse_math__delimiter(doc, data + i, size - i, &end, &is_inline, &not_found);
+  if (i == start) return 0;
+
+  // Search for ending delimiter
+  if (*not_found) return 0;
+  mark = i;
+  while (1) {
+    while (i < size && data[i] != end.data[0]) i++;
+    if (i >= size) {
+      *not_found = 1;
+      return 0;
+    }
+
+    if (i + end.size <= size && !is_escaped(data, i) &&
+        memcmp(data + i, end.data, end.size) == 0) break;
+    i++;
+  }
+
+  // Autodetect type of span, if needed
+  if (is_inline == 9)
+    is_inline = (start > 0) || (i + end.size < size);
+
+  // Render!
+  parse_string(doc, target, data + parsed, start - parsed);
+
+  hoedown_buffer math = {(uint8_t *)data + mark, i - mark, 0, 0, NULL, NULL};
+  doc->rndr.math(target, &math, is_inline, &doc->data);
+  return i + end.size;
+}
+
 
 // BLOCK PARSING
 
@@ -2795,6 +2883,9 @@ static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *d
 }
 
 static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
+  if (ft & HOEDOWN_FT_MATH)
+    register_inline_chars(doc, "\\$", parse_math);
+
   if (ft & HOEDOWN_FT_ESCAPE)
     register_inline_chars(doc, "\\", parse_escape);
 
@@ -2930,6 +3021,8 @@ static inline void restrict_features(const hoedown_renderer *rndr, hoedown_featu
     not_present |= HOEDOWN_FT_EMPHASIS;
   if (!rndr->link)
     not_present |= HOEDOWN_FT_LINK;
+  if (!rndr->math)
+    not_present |= HOEDOWN_FT_MATH;
 
   // Remove not present features from *ft
   *ft &= ~not_present;

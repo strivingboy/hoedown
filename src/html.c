@@ -245,6 +245,14 @@ static void rndr_link(void *target, void *content_, const hoedown_buffer *dest, 
   }
 }
 
+static void rndr_math(void *target, const hoedown_buffer *math, int is_inline, const hoedown_renderer_data *data) {
+  hoedown_buffer *ob = target;
+
+  hoedown_buffer_put(ob, (const uint8_t *)(is_inline ? "\\(" : "\\["), 2);
+  hoedown_escape_html(ob, math->data, math->size);
+  hoedown_buffer_put(ob, (const uint8_t *)(is_inline ? "\\)" : "\\]"), 2);
+}
+
 
 
 // RENDERER INITIALIZATION
@@ -274,6 +282,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
     rndr_code,
     rndr_emphasis,
     rndr_link,
+    rndr_math,
 
     object_get,
     object_merge,
