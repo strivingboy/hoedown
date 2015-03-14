@@ -27,6 +27,7 @@ static void rndr_emphasis(void *target, void *content, size_t width, uint8_t del
 static void rndr_link(void *target, void *content, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data) {}
 static void rndr_math(void *target, const hoedown_buffer *math, int is_inline, const hoedown_renderer_data *data) {}
 static void rndr_superscript(void *target, void *content, const hoedown_renderer_data *data) {}
+static void rndr_strikethrough(void *target, void *content, const hoedown_renderer_data *data) {}
 static void rndr_emoji(void *target, const hoedown_buffer *name, const hoedown_renderer_data *data) {}
 static void rndr_typography(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data) {}
 
@@ -67,6 +68,7 @@ hoedown_renderer *hoedown_noop_renderer_new() {
     rndr_link,
     rndr_math,
     rndr_superscript,
+    rndr_strikethrough,
     rndr_emoji,
     rndr_typography,
 

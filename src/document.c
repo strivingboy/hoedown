@@ -1709,6 +1709,30 @@ static size_t parse_superscript(hoedown_document *doc, void *target, const uint8
   return i;
 }
 
+// data[start] is assumed to be '~'
+static size_t parse_strikethrough(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t end = start + 2;
+  if (end > size || data[start+1] != '~') return 0;
+
+  // Try to close stikethrough nesting
+  inline_nesting *entry;
+  for (entry = doc->inline_data->nesting; entry; entry = entry->previous) {
+    if (entry->delimiter == '~') {
+      discard_nestings(doc, entry);
+      parse_string(doc, target, data + parsed, start - parsed);
+
+      parse_string(doc, entry->parent, data + entry->parsed, entry->start - entry->parsed);
+      doc->rndr.strikethrough(entry->parent, target, &doc->data);
+      close_nesting(doc, entry);
+      return end;
+    }
+  }
+
+  // Otherwise open nesting
+  open_nesting(doc, '~', parsed, start, end);
+  return end;
+}
+
 // data[start] is assumed to be ')'
 static size_t parse_parenthesis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   inline_nesting *entry;
@@ -3035,6 +3059,9 @@ static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
   if (ft & HOEDOWN_FT_SUPERSCRIPT)
     register_inline_chars(doc, "^", parse_superscript);
 
+  if (ft & HOEDOWN_FT_STRIKETHROUGH)
+    register_inline_chars(doc, "~", parse_strikethrough);
+
   if (ft & HOEDOWN_FT_EMOJI)
     register_inline_chars(doc, ":", parse_emoji);
 
@@ -3160,6 +3187,8 @@ static inline void restrict_features(const hoedown_renderer *rndr, hoedown_featu
     not_present |= HOEDOWN_FT_MATH;
   if (!rndr->superscript)
     not_present |= HOEDOWN_FT_SUPERSCRIPT;
+  if (!rndr->strikethrough)
+    not_present |= HOEDOWN_FT_STRIKETHROUGH;
   if (!rndr->emoji)
     not_present |= HOEDOWN_FT_EMOJI;
   if (!rndr->typography)
