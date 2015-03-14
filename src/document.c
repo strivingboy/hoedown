@@ -53,7 +53,7 @@ typedef struct inline_nesting {
   struct inline_nesting *previous;
 
   void *parent;
-  uint8_t delimiter;
+  hoedown_features ft;
   size_t parsed;
   size_t start;
   size_t end;
@@ -880,7 +880,7 @@ static size_t parse_block(hoedown_document *doc, void *target, const uint8_t *da
 static size_t parse_single_inline(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size);
 static size_t parse_inline(hoedown_document *doc, void *target, const uint8_t *data, size_t size, uint8_t delimiter);
 
-static inline_nesting *open_nesting(hoedown_document *doc, uint8_t delimiter, size_t parsed, size_t start, size_t end);
+static inline_nesting *open_nesting(hoedown_document *doc, hoedown_features ft, size_t parsed, size_t start, size_t end);
 static void close_nesting(hoedown_document *doc, inline_nesting *entry);
 static void discard_nestings(hoedown_document *doc, inline_nesting *top);
 
@@ -1569,7 +1569,7 @@ static size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t 
   // Try to close as many emphasis as possible with this delimiter
   if (can_close) {
     for (entry = doc->inline_data->nesting; entry && mark < i; entry = entry->previous) {
-      if (entry->delimiter != delimiter) continue;
+      if (entry->ft != HOEDOWN_FT_EMPHASIS || data[entry->start] != delimiter) continue;
 
       // Found a valid entry to close! Yay!
       discard_nestings(doc, entry);
@@ -1596,7 +1596,7 @@ static size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t 
 
   // Open nesting entry for this emphasis
   if (can_open && mark < i && doc->current_nesting < doc->max_nesting) {
-    entry = open_nesting(doc, delimiter, parsed, mark, i);
+    entry = open_nesting(doc, HOEDOWN_FT_EMPHASIS, parsed, mark, i);
     parsed = mark = i;
   }
 
@@ -1690,7 +1690,7 @@ static size_t parse_superscript(hoedown_document *doc, void *target, const uint8
   // If the superscript is nesting, open nesting and return
   if (i < size && data[i] == '(') {
     if (doc->current_nesting >= doc->max_nesting) return 0;
-    open_nesting(doc, '^', parsed, start, i + 1);
+    open_nesting(doc, HOEDOWN_FT_SUPERSCRIPT, parsed, start, i + 1);
     return i + 1;
   }
 
@@ -1718,7 +1718,7 @@ static size_t parse_strikethrough(hoedown_document *doc, void *target, const uin
   // Try to close stikethrough nesting
   inline_nesting *entry;
   for (entry = doc->inline_data->nesting; entry; entry = entry->previous) {
-    if (entry->delimiter == '~') {
+    if (entry->ft == HOEDOWN_FT_STRIKETHROUGH) {
       discard_nestings(doc, entry);
       parse_string(doc, target, data + parsed, start - parsed);
 
@@ -1730,7 +1730,7 @@ static size_t parse_strikethrough(hoedown_document *doc, void *target, const uin
   }
 
   // Otherwise open nesting
-  open_nesting(doc, '~', parsed, start, end);
+  open_nesting(doc, HOEDOWN_FT_STRIKETHROUGH, parsed, start, end);
   return end;
 }
 
@@ -1742,7 +1742,7 @@ static size_t parse_highlight(hoedown_document *doc, void *target, const uint8_t
   // Try to close stikethrough nesting
   inline_nesting *entry;
   for (entry = doc->inline_data->nesting; entry; entry = entry->previous) {
-    if (entry->delimiter == '=') {
+    if (entry->ft == HOEDOWN_FT_HIGHLIGHT) {
       discard_nestings(doc, entry);
       parse_string(doc, target, data + parsed, start - parsed);
 
@@ -1754,7 +1754,7 @@ static size_t parse_highlight(hoedown_document *doc, void *target, const uint8_t
   }
 
   // Otherwise open nesting
-  open_nesting(doc, '=', parsed, start, end);
+  open_nesting(doc, HOEDOWN_FT_HIGHLIGHT, parsed, start, end);
   return end;
 }
 
@@ -1762,7 +1762,7 @@ static size_t parse_highlight(hoedown_document *doc, void *target, const uint8_t
 static size_t parse_parenthesis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   inline_nesting *entry;
   for (entry = doc->inline_data->nesting; entry; entry = entry->previous) {
-    if (entry->delimiter == '^') {
+    if (entry->ft == HOEDOWN_FT_SUPERSCRIPT) {
       discard_nestings(doc, entry);
       parse_string(doc, target, data + parsed, start - parsed);
 
@@ -1784,11 +1784,11 @@ static size_t parse_sidenote(hoedown_document *doc, void *target, const uint8_t 
   if (doc->inside_footnote) return 0;
   inline_nesting *entry;
   for (entry = doc->inline_data->nesting; entry; entry = entry->previous) {
-    if (entry->delimiter == '[') return 0;
+    if (entry->ft == HOEDOWN_FT_SIDENOTE) return 0;
   }
 
   // Open nesting entry
-  open_nesting(doc, '[', parsed, start, end);
+  open_nesting(doc, HOEDOWN_FT_SIDENOTE, parsed, start, end);
   return end;
 }
 
@@ -1796,7 +1796,7 @@ static size_t parse_sidenote(hoedown_document *doc, void *target, const uint8_t 
 static size_t parse_bracket(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   inline_nesting *entry;
   for (entry = doc->inline_data->nesting; entry; entry = entry->previous) {
-    if (entry->delimiter == '[') {
+    if (entry->ft == HOEDOWN_FT_SIDENOTE) {
       discard_nestings(doc, entry);
       parse_string(doc, target, data + parsed, start - parsed);
 
@@ -2998,7 +2998,7 @@ static void set_block_chars(hoedown_document *doc, hoedown_features ft) {
 //
 //     nesting:
 //       parent: <target A> (code span "code")
-//       delimiter: '*'
+//       ft: HOEDOWN_FT_EMPHASIS
 //       start: 8
 //       end: 9
 //
@@ -3010,7 +3010,7 @@ static void set_block_chars(hoedown_document *doc, hoedown_features ft) {
 //
 //     nesting:
 //       parent: <target A> (code span "code")
-//       delimiter: '*'
+//       ft: HOEDOWN_FT_EMPHASIS
 //       start: 8
 //       end: 9
 //
@@ -3172,12 +3172,12 @@ static void discard_nestings(hoedown_document *doc, inline_nesting *top) {
 }
 
 // Switch parsing to a new nesting entry, and return it.
-static inline_nesting *open_nesting(hoedown_document *doc, uint8_t delimiter, size_t parsed, size_t start, size_t end) {
+static inline_nesting *open_nesting(hoedown_document *doc, hoedown_features ft, size_t parsed, size_t start, size_t end) {
   inline_data *data = doc->inline_data;
   inline_nesting *entry = hoedown_pool_get(&doc->inline_nesting__pool);
 
   entry->parent = data->target;
-  entry->delimiter = delimiter;
+  entry->ft = ft;
   entry->parsed = parsed;
   entry->start = start;
   entry->end = end;
