@@ -26,10 +26,20 @@ static void render_start(int is_inline, const hoedown_renderer_data *data) {
 }
 
 static void *render_end(void *target, int is_inline, const hoedown_renderer_data *data) {
+  hoedown_buffer *ob = target;
   hoedown_html_renderer_state *state = data->opaque;
-  hoedown_pool_detach(&state->buffers, target);
+  hoedown_pool_detach(&state->buffers, ob);
+
+  // Render the footnotes
+  if (state->footnote_count) {
+    HOEDOWN_BUFPUTSL(ob, "\n<ul class=\"footnotes\">\n");
+    hoedown_buffer_put(ob, state->footnotes->data, state->footnotes->size);
+    HOEDOWN_BUFPUTSL(ob, "</ul>\n");
+  }
 
   assert(state->buffers.size == state->buffers.isize);
+  state->footnotes->size = 0;
+  state->footnote_count = 0;
   return target;
 }
 
@@ -343,6 +353,9 @@ hoedown_renderer *hoedown_html_renderer_new() {
 
   hoedown_buffer_pool_init(&state->buffers, 16, 64);
 
+  state->footnote_count = 0;
+  state->footnotes = hoedown_buffer_new(64);
+
   return rndr;
 }
 
@@ -351,6 +364,7 @@ void hoedown_html_renderer_free(hoedown_renderer *rndr) {
 
   hoedown_html_renderer_state *state = rndr->opaque;
   hoedown_pool_uninit(&state->buffers);
+  hoedown_buffer_free(state->footnotes);
   free(state);
 
   free(rndr);

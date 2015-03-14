@@ -102,6 +102,7 @@ struct hoedown_document {
   hoedown_pool block_chars__pool;
   parsing_mode mode;
   size_t is_tight;
+  size_t inside_footnote;
 
   // Inline parsing
   hoedown_pool inline_buffers;
@@ -3255,6 +3256,7 @@ hoedown_document *hoedown_document_new(
   set_block_chars(doc, features);
   doc->mode = NORMAL_PARSING;
   doc->is_tight = 0;
+  doc->inside_footnote = 0;
 
   // Inline parsing
   hoedown_buffer_pool_init(&doc->inline_buffers, 8, 64);
@@ -3334,6 +3336,7 @@ void *hoedown_document_render(
   assert(doc->mode == NORMAL_PARSING);
   assert(doc->block_buffers.size == doc->block_buffers.isize);
   assert(!doc->is_tight);
+  assert(!doc->inside_footnote);
   assert(doc->inline_buffers.size == doc->inline_buffers.isize);
   assert(doc->inline_data == NULL);
   assert(doc->inline_data__pool.size == doc->inline_data__pool.isize);

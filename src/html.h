@@ -19,6 +19,8 @@ extern "C" {
 typedef struct hoedown_html_renderer_state {
   void *opaque;
   hoedown_pool buffers;
+  size_t footnote_count;
+  hoedown_buffer *footnotes;
 } hoedown_html_renderer_state;
 
 
