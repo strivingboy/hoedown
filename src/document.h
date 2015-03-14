@@ -210,6 +210,7 @@ typedef struct hoedown_renderer {
   void (*math)(void *target, const hoedown_buffer *math, int is_inline, const hoedown_renderer_data *data);
   void (*superscript)(void *target, void *content, const hoedown_renderer_data *data);
   void (*strikethrough)(void *target, void *content, const hoedown_renderer_data *data);
+  void (*highlight)(void *target, void *content, const hoedown_renderer_data *data);
   void (*emoji)(void *target, const hoedown_buffer *name, const hoedown_renderer_data *data);
   void (*typography)(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data);
 

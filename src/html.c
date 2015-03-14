@@ -269,6 +269,14 @@ static void rndr_strikethrough(void *target, void *content_, const hoedown_rende
   HOEDOWN_BUFPUTSL(ob, "</del>");
 }
 
+static void rndr_highlight(void *target, void *content_, const hoedown_renderer_data *data) {
+  hoedown_buffer *ob = target, *content = content_;
+
+  HOEDOWN_BUFPUTSL(ob, "<mark>");
+  hoedown_buffer_put(ob, content->data, content->size);
+  HOEDOWN_BUFPUTSL(ob, "</mark>");
+}
+
 static void rndr_emoji(void *target, const hoedown_buffer *name, const hoedown_renderer_data *data) {
   hoedown_buffer *ob = target;
 
@@ -315,6 +323,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
     rndr_math,
     rndr_superscript,
     rndr_strikethrough,
+    rndr_highlight,
     rndr_emoji,
     rndr_typography,
 
