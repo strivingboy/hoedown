@@ -1582,13 +1582,13 @@ static size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t 
       // Render emphasis and [partially] close the nesting
       if (width < entry->end - entry->start) {
         void *intermediate = doc->rndr.object_get(1, &doc->data);
-        doc->rndr.emphasis(intermediate, doc->inline_data->target, width, delimiter, &doc->data);
+        doc->rndr.emphasis(intermediate, doc->inline_data->target, width, &doc->data);
         doc->rndr.object_pop(doc->inline_data->target, 1, &doc->data);
         doc->inline_data->target = intermediate;
         entry->end -= width;
       } else {
         parse_string(doc, entry->parent, data + entry->parsed, entry->start - entry->parsed);
-        doc->rndr.emphasis(entry->parent, doc->inline_data->target, width, delimiter, &doc->data);
+        doc->rndr.emphasis(entry->parent, doc->inline_data->target, width, &doc->data);
         close_nesting(doc, entry);
       }
     }

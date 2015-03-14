@@ -220,7 +220,7 @@ static void rndr_code(void *target, const hoedown_buffer *code, const hoedown_re
   HOEDOWN_BUFPUTSL(ob, "</code>");
 }
 
-static void rndr_emphasis(void *target, void *content_, size_t width, uint8_t delimiter, const hoedown_renderer_data *data) {
+static void rndr_emphasis(void *target, void *content_, size_t width, const hoedown_renderer_data *data) {
   hoedown_buffer *ob = target, *content = content_;
   int strongs = width / 2, em = width % 2;
 
