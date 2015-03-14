@@ -2789,9 +2789,10 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
 // It'll look up the char triggers associated with the next character in the
 // line, and will call them in order.
 //
-// If some of the char triggers succeeds parsing, `parse_block` will advance
-// to the returned position. If all of the char triggers returned `0`, or
-// there were no matching char triggers to call, it'll skip to the next line.
+// If one of the char triggers succeeds parsing, no more char triggers will
+// be called, and `parse_block` will advance to the returned position.
+// If all of the char triggers returned `0`, or there were no matching
+// char triggers to call, it'll skip to the next line.
 //
 // `set_block_chars` is also implemented, which associates block char triggers
 // to their characters depending on the enabled features. It's called by the
@@ -2973,7 +2974,7 @@ static void set_block_chars(hoedown_document *doc, hoedown_features ft) {
 // found, you need to take several measures or the parser will block with
 // malicious input that abuses nesting. See for example `parse_link`.
 //
-// ### Nesting stack example
+// #### Nesting stack example
 //
 // Instead of recursing when a nesting construct (such as emphasis) is being
 // parsed, the approach is to add an entry to the so called "nesting stack",
