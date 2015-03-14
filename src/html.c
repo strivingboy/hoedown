@@ -145,6 +145,20 @@ static void rndr_html_block(void *target, const hoedown_buffer *html, const hoed
 }
 
 
+// SHARED LOGIC
+
+static void render_footnote(hoedown_buffer *ob, hoedown_buffer *content, hoedown_html_renderer_state *state) {
+  int num = ++state->footnote_count;
+
+  // Render the footnote reference
+  hoedown_buffer_printf(ob, "<sup id=\"fnref-%1$d\"><a href=\"#fn-%1$d\" rel=\"footnote\">%1$d</a></sup>", num);
+
+  // Render the footnote itself
+  hoedown_buffer_printf(state->footnotes, "<li id=\"fn-%1$d\">", num);
+  hoedown_buffer_put(state->footnotes, content->data, content->size);
+  hoedown_buffer_printf(state->footnotes, "&nbsp;<a href=\"#fnref-%d\" rev=\"footnote\">&#8617;</a></li>\n", num);
+}
+
 
 // INLINE CONSTRUCTS
 
@@ -287,6 +301,12 @@ static void rndr_highlight(void *target, void *content_, const hoedown_renderer_
   HOEDOWN_BUFPUTSL(ob, "</mark>");
 }
 
+static void rndr_sidenote(void *target, void *content_, const hoedown_renderer_data *data) {
+  hoedown_buffer *ob = target, *content = content_;
+  hoedown_html_renderer_state *state = data->opaque;
+  render_footnote(ob, content, state);
+}
+
 static void rndr_emoji(void *target, const hoedown_buffer *name, const hoedown_renderer_data *data) {
   hoedown_buffer *ob = target;
 
@@ -334,6 +354,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
     rndr_superscript,
     rndr_strikethrough,
     rndr_highlight,
+    rndr_sidenote,
     rndr_emoji,
     rndr_typography,
 

@@ -1775,6 +1775,40 @@ static size_t parse_parenthesis(hoedown_document *doc, void *target, const uint8
   return 0;
 }
 
+// data[start] is assumed to be '^'
+static size_t parse_sidenote(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t end = start + 2;
+  if (end > size || data[start+1] != '[') return 0;
+
+  // Sidenotes and footnotes cannot contain sidenotes
+  if (doc->inside_footnote) return 0;
+  inline_nesting *entry;
+  for (entry = doc->inline_data->nesting; entry; entry = entry->previous) {
+    if (entry->delimiter == '[') return 0;
+  }
+
+  // Open nesting entry
+  open_nesting(doc, '[', parsed, start, end);
+  return end;
+}
+
+// data[start] is assumed to be ']'
+static size_t parse_bracket(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  inline_nesting *entry;
+  for (entry = doc->inline_data->nesting; entry; entry = entry->previous) {
+    if (entry->delimiter == '[') {
+      discard_nestings(doc, entry);
+      parse_string(doc, target, data + parsed, start - parsed);
+
+      parse_string(doc, entry->parent, data + entry->parsed, entry->start - entry->parsed);
+      doc->rndr.sidenote(entry->parent, target, &doc->data);
+      close_nesting(doc, entry);
+      return start + 1;
+    }
+  }
+  return 0;
+}
+
 static inline int is_emoji_name(uint8_t c) {
   return is_lower_ascii(c) || c == '_' || c == '-' || is_digit_ascii(c);
 }
@@ -3081,6 +3115,9 @@ static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
   if (ft & HOEDOWN_FT_LINK)
     register_inline_chars(doc, "[", parse_link);
 
+  if (ft & HOEDOWN_FT_SIDENOTE)
+    register_inline_chars(doc, "^", parse_sidenote);
+
   if (ft & HOEDOWN_FT_SUPERSCRIPT)
     register_inline_chars(doc, "^", parse_superscript);
 
@@ -3103,11 +3140,14 @@ static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
 
   // LOW-PRIORITY FUNCTIONS (register at the very end)
 
-  if (ft & HOEDOWN_FT_LINK)
-    register_inline_chars(doc, "[]", parse_brackets);
+  if (ft & HOEDOWN_FT_SIDENOTE)
+    register_inline_chars(doc, "]", parse_bracket);
 
   if (ft & HOEDOWN_FT_SUPERSCRIPT)
     register_inline_chars(doc, ")", parse_parenthesis);
+
+  if (ft & HOEDOWN_FT_LINK)
+    register_inline_chars(doc, "[]", parse_brackets);
 }
 
 
@@ -3219,6 +3259,8 @@ static inline void restrict_features(const hoedown_renderer *rndr, hoedown_featu
     not_present |= HOEDOWN_FT_STRIKETHROUGH;
   if (!rndr->highlight)
     not_present |= HOEDOWN_FT_HIGHLIGHT;
+  if (!rndr->sidenote)
+    not_present |= HOEDOWN_FT_SIDENOTE;
   if (!rndr->emoji)
     not_present |= HOEDOWN_FT_EMOJI;
   if (!rndr->typography)
