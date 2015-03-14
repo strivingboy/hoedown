@@ -1682,6 +1682,50 @@ static size_t parse_math(hoedown_document *doc, void *target, const uint8_t *dat
   return i + end.size;
 }
 
+// data[start] is assumed to be '^'
+static size_t parse_superscript(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t i = start + 1, mark;
+
+  // If the superscript is nesting, open nesting and return
+  if (i < size && data[i] == '(') {
+    if (doc->current_nesting >= doc->max_nesting) return 0;
+    open_nesting(doc, '^', parsed, start, i + 1);
+    return i + 1;
+  }
+
+  // Collect next "word"
+  //FIXME: Unicode support
+  mark = i;
+  while (i < size && !is_space(data[i]) && !is_punct_ascii(data[i])) i++;
+  if (mark == i) return 0;
+
+  // Render!
+  parse_string(doc, target, data + parsed, start - parsed);
+
+  void *content = doc->rndr.object_get(1, &doc->data);
+  parse_string(doc, content, data + mark, i - mark);
+  doc->rndr.superscript(target, content, &doc->data);
+  doc->rndr.object_pop(content, 1, &doc->data);
+  return i;
+}
+
+// data[start] is assumed to be ')'
+static size_t parse_parenthesis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  inline_nesting *entry;
+  for (entry = doc->inline_data->nesting; entry; entry = entry->previous) {
+    if (entry->delimiter == '^') {
+      discard_nestings(doc, entry);
+      parse_string(doc, target, data + parsed, start - parsed);
+
+      parse_string(doc, entry->parent, data + entry->parsed, entry->start - entry->parsed);
+      doc->rndr.superscript(entry->parent, target, &doc->data);
+      close_nesting(doc, entry);
+      return start + 1;
+    }
+  }
+  return 0;
+}
+
 static inline int is_emoji_name(uint8_t c) {
   return is_lower_ascii(c) || c == '_' || c == '-' || is_digit_ascii(c);
 }
@@ -2988,6 +3032,9 @@ static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
   if (ft & HOEDOWN_FT_LINK)
     register_inline_chars(doc, "[", parse_link);
 
+  if (ft & HOEDOWN_FT_SUPERSCRIPT)
+    register_inline_chars(doc, "^", parse_superscript);
+
   if (ft & HOEDOWN_FT_EMOJI)
     register_inline_chars(doc, ":", parse_emoji);
 
@@ -3003,6 +3050,9 @@ static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
 
   if (ft & HOEDOWN_FT_LINK)
     register_inline_chars(doc, "[]", parse_brackets);
+
+  if (ft & HOEDOWN_FT_SUPERSCRIPT)
+    register_inline_chars(doc, ")", parse_parenthesis);
 }
 
 
@@ -3108,6 +3158,8 @@ static inline void restrict_features(const hoedown_renderer *rndr, hoedown_featu
     not_present |= HOEDOWN_FT_LINK;
   if (!rndr->math)
     not_present |= HOEDOWN_FT_MATH;
+  if (!rndr->superscript)
+    not_present |= HOEDOWN_FT_SUPERSCRIPT;
   if (!rndr->emoji)
     not_present |= HOEDOWN_FT_EMOJI;
   if (!rndr->typography)

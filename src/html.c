@@ -253,6 +253,14 @@ static void rndr_math(void *target, const hoedown_buffer *math, int is_inline, c
   hoedown_buffer_put(ob, (const uint8_t *)(is_inline ? "\\)" : "\\]"), 2);
 }
 
+static void rndr_superscript(void *target, void *content_, const hoedown_renderer_data *data) {
+  hoedown_buffer *ob = target, *content = content_;
+
+  HOEDOWN_BUFPUTSL(ob, "<sup>");
+  hoedown_buffer_put(ob, content->data, content->size);
+  HOEDOWN_BUFPUTSL(ob, "</sup>");
+}
+
 static void rndr_emoji(void *target, const hoedown_buffer *name, const hoedown_renderer_data *data) {
   hoedown_buffer *ob = target;
 
@@ -297,6 +305,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
     rndr_emphasis,
     rndr_link,
     rndr_math,
+    rndr_superscript,
     rndr_emoji,
     rndr_typography,
 
