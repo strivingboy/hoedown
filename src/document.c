@@ -1682,6 +1682,26 @@ static size_t parse_math(hoedown_document *doc, void *target, const uint8_t *dat
   return i + end.size;
 }
 
+static inline int is_emoji_name(uint8_t c) {
+  return is_lower_ascii(c) || c == '_' || c == '-' || is_digit_ascii(c);
+}
+
+// data[start] is assumed to be ':'
+static size_t parse_emoji(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
+  size_t i = start + 1, mark;
+
+  mark = i;
+  while (i < size && is_emoji_name(data[i])) i++;
+  if (mark == i || i >= size || data[i] != ':') return 0;
+
+  // Render!
+  parse_string(doc, target, data + parsed, start - parsed);
+
+  hoedown_buffer name = {(uint8_t *)data + mark, i - mark, 0, 0, NULL, NULL};
+  doc->rndr.emoji(target, &name, &doc->data);
+  return i + 1;
+}
+
 // data[start] is assumed to be '"' or '-'
 static size_t parse_typography_quote(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   size_t end = start + 1;
@@ -1764,7 +1784,7 @@ static inline size_t parse_atx_header_end(const uint8_t *data, size_t size) {
   // Retract to skip trailing hashes
   mark = i;
   while (i > 0 && data[i-1] == '#') i--;
-  if (i == mark) return size;
+  if (mark == i) return size;
 
   // Check that they're present, and not escaped
   if (is_escaped(data, i)) return size;
@@ -1772,7 +1792,7 @@ static inline size_t parse_atx_header_end(const uint8_t *data, size_t size) {
   // Retract again to skip spaces between content and hashes
   mark = i;
   while (i > 0 && data[i-1] == ' ') i--;
-  if (i == mark && i > 0) return size;
+  if (mark == i && i > 0) return size;
 
   return i;
 }
@@ -2546,7 +2566,7 @@ static size_t collect_list_items(hoedown_document *doc, const uint8_t *data, siz
     if (i - mark >= 5) i = mark + 1;
 
     indentation = result + (i - mark);
-    if (i == mark) indentation++;
+    if (mark == i) indentation++;
 
     mark = i;
     while (i < size && data[i] != '\n') i++;
@@ -2968,6 +2988,9 @@ static void set_inline_chars(hoedown_document *doc, hoedown_features ft) {
   if (ft & HOEDOWN_FT_LINK)
     register_inline_chars(doc, "[", parse_link);
 
+  if (ft & HOEDOWN_FT_EMOJI)
+    register_inline_chars(doc, ":", parse_emoji);
+
   if (ft & HOEDOWN_FT_TYPOGRAPHY) {
     register_inline_chars(doc, "'\"", parse_typography_quote);
     register_inline_chars(doc, "-", parse_typography_dash);
@@ -3085,6 +3108,8 @@ static inline void restrict_features(const hoedown_renderer *rndr, hoedown_featu
     not_present |= HOEDOWN_FT_LINK;
   if (!rndr->math)
     not_present |= HOEDOWN_FT_MATH;
+  if (!rndr->emoji)
+    not_present |= HOEDOWN_FT_EMOJI;
   if (!rndr->typography)
     not_present |= HOEDOWN_FT_TYPOGRAPHY;
 
