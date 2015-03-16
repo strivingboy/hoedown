@@ -147,20 +147,44 @@ static void _free_pool_item(void *item, void *opaque) {
 
 // CHAR TRIGGERS
 
+static void register_block_char(hoedown_document *doc, uint8_t c, char_trigger trigger, int can_interrupt, hoedown_features lazy_ft) {
+  block_char_entry *entry = hoedown_pool_get(&doc->block_chars__pool);
+
+  entry->next = NULL;
+  entry->trigger = trigger;
+  entry->can_interrupt = can_interrupt;
+  entry->lazy_ft = lazy_ft;
+
+  block_char_entry **slot = &doc->block_chars[c];
+  while (*slot) slot = &(*slot)->next;
+  *slot = entry;
+}
+
+static void register_inline_char(hoedown_document *doc, uint8_t c, char_trigger trigger) {
+  inline_char_entry *entry = hoedown_pool_get(&doc->inline_chars__pool);
+
+  entry->next = NULL;
+  entry->trigger = trigger;
+
+  inline_char_entry **slot = &doc->inline_chars[c];
+  while (*slot) slot = &(*slot)->next;
+  *slot = entry;
+}
+
 static void register_block_chars(hoedown_document *doc, const char *chars, char_trigger trigger, int can_interrupt, hoedown_features lazy_ft) {
-  for (; *chars; chars++) {
-    uint8_t c = (uint8_t) *chars;
-    block_char_entry *entry = hoedown_pool_get(&doc->block_chars__pool);
-
-    entry->next = NULL;
-    entry->trigger = trigger;
-    entry->can_interrupt = can_interrupt;
-    entry->lazy_ft = lazy_ft;
-
-    block_char_entry **slot = &doc->block_chars[c];
-    while (*slot) slot = &(*slot)->next;
-    *slot = entry;
+  if (chars) {
+    for (; *chars; chars++)
+      register_block_char(doc, *chars, trigger, can_interrupt, lazy_ft);
+  } else {
+    int c;
+    for (c = 0; c < 256; c++)
+      register_block_char(doc, c, trigger, can_interrupt, lazy_ft);
   }
+}
+
+static void register_inline_chars(hoedown_document *doc, const char *chars, char_trigger trigger) {
+  for (; *chars; chars++)
+    register_inline_char(doc, *chars, trigger);
 }
 
 static void reset_block_chars(hoedown_document *doc) {
@@ -178,20 +202,6 @@ static void reset_inline_chars(hoedown_document *doc) {
   for (i = 0; i < 256; i++) {
     for (entry = doc->inline_chars[i]; entry; entry = entry->next)
       hoedown_pool_pop(&doc->inline_chars__pool, entry);
-  }
-}
-
-static void register_inline_chars(hoedown_document *doc, const char *chars, char_trigger trigger) {
-  for (; *chars; chars++) {
-    uint8_t c = (uint8_t) *chars;
-    inline_char_entry *entry = hoedown_pool_get(&doc->inline_chars__pool);
-
-    entry->next = NULL;
-    entry->trigger = trigger;
-
-    inline_char_entry **slot = &doc->inline_chars[c];
-    while (*slot) slot = &(*slot)->next;
-    *slot = entry;
   }
 }
 
