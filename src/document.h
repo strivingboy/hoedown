@@ -176,6 +176,7 @@ typedef struct hoedown_document hoedown_document;
 typedef struct hoedown_internal hoedown_internal;
 
 typedef struct hoedown_renderer_data {
+  hoedown_buffer src [5];
   void *opaque;
   void *request;
   hoedown_internal *doc;
