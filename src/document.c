@@ -1904,7 +1904,7 @@ static size_t parse_typography_quote(hoedown_document *doc, void *target, const 
   hoedown_buffer character = {
     (uint8_t *)((data[start] == '"')
       ? (left_flanking ? "“" : "”")
-      : (left_flanking ? "‘" : "‘")
+      : (left_flanking ? "‘" : "’")
     ), 3, 0, 0, NULL, NULL
   };
   set_buffer_data(&doc->data.src[0], data, start, end);
