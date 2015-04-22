@@ -2833,22 +2833,22 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
   if (!is_loose)
     doc->is_tight = doc->current_nesting + 1;
 
-  work->size = 0;
+  size_t offset = 0, source = 0;
   for (slice = 0; slice < slices->size; slice += 2*sizeof(size_t)) {
-    size_t offset = *((size_t *) &slices->data[slice]);
-    size_t src_start = *((size_t *) &slices->data[slice-1]);
-    size_t src_end = *((size_t *) &slices->data[slice+1]);
+    size_t new_offset = *((size_t *) &slices->data[slice]);
+    size_t new_source = *((size_t *) &slices->data[slice+sizeof(size_t)]);
     if (current_mode == NORMAL_PARSING) {
       void *item_content = doc->rndr.object_get(0, &doc->data);
-      parse_block(doc, item_content, work->data + work->size, offset - work->size, offset - work->size, 0);
-      set_buffer_data(&doc->data.src[0], data, src_start, src_end);
-      set_buffer_data(&doc->data.src[1], work->data, work->size, offset);
+      parse_block(doc, item_content, work->data + offset, new_offset - offset, new_offset - offset, 0);
+      set_buffer_data(&doc->data.src[0], data, source, new_source);
+      set_buffer_data(&doc->data.src[1], work->data, offset, new_offset);
       doc->rndr.list_item(content, item_content, is_ordered, !is_loose, &doc->data);
       doc->rndr.object_pop(item_content, 0, &doc->data);
     } else {
-      parse_block(doc, NULL, work->data + work->size, offset - work->size, offset - work->size, 0);
+      parse_block(doc, NULL, work->data + offset, new_offset - offset, new_offset - offset, 0);
     }
-    work->size = offset;
+    offset = new_offset;
+    source = new_source;
   }
 
   doc->is_tight = current_is_tight;
