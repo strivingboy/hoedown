@@ -26,6 +26,7 @@ add_library(libhoedown
   src/document.c
   src/escape.c
   src/html.c
+  src/list.c
   src/pool.c
   src/version.c
 
