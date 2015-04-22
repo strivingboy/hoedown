@@ -3453,6 +3453,7 @@ void *hoedown_document_render(
 
   // Prepare
   doc->data.request = request;
+  set_buffer_data(&doc->data.src[0], odata, 0, osize);
   doc->rndr.render_start(is_inline, &doc->data);
   void *target = doc->rndr.object_get(is_inline, &doc->data);
 
@@ -3467,6 +3468,7 @@ void *hoedown_document_render(
   }
 
   // Finish & cleanup
+  set_buffer_data(&doc->data.src[0], odata, 0, osize);
   void *result = doc->rndr.render_end(target, is_inline, &doc->data);
 
   if (text) hoedown_pool_pop(&doc->block_buffers, text);
