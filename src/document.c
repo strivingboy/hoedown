@@ -119,9 +119,6 @@ struct hoedown_document {
   // Marker parsing
   link_ref *link_refs [LINK_REFS_TABLE_SIZE];
   hoedown_pool link_refs__pool;
-
-  // Other features: preprocessing
-  hoedown_buffer *text;
 };
 
 
@@ -3414,9 +3411,6 @@ hoedown_document *hoedown_document_new(
   memset(&doc->link_refs, 0, sizeof(doc->link_refs));
   hoedown_pool_init(&doc->link_refs__pool, 8, _new_link_ref, _free_pool_item, NULL);
 
-  // Other features: preprocessing
-  doc->text = hoedown_buffer_new(64);
-
   return doc;
 }
 
@@ -3436,9 +3430,6 @@ void hoedown_document_free(hoedown_document *doc) {
   hoedown_pool_uninit(&doc->inline_nesting__pool);
   hoedown_pool_uninit(&doc->link_refs__pool);
 
-  // Other resources
-  hoedown_buffer_free(doc->text);
-
   free(doc);
 }
 
@@ -3448,11 +3439,16 @@ void *hoedown_document_render(
   const uint8_t *data, size_t size,
   int is_inline, void *request
 ) {
+  const uint8_t *odata = data;
+  size_t osize = size;
+  hoedown_buffer *text = NULL;
+
   // Preprocess the input
   if (doc->ft & HOEDOWN_FT_PREPROCESS) {
-    normalize_spacing(doc->text, data, size);
-    data = doc->text->data;
-    size = doc->text->size;
+    text = hoedown_pool_get(&doc->block_buffers);
+    normalize_spacing(text, data, size);
+    data = text->data;
+    size = text->size;
   }
 
   // Prepare
@@ -3473,6 +3469,7 @@ void *hoedown_document_render(
   // Finish & cleanup
   void *result = doc->rndr.render_end(target, is_inline, &doc->data);
 
+  if (text) hoedown_pool_pop(&doc->block_buffers, text);
   assert(doc->current_nesting == 0);
   assert(doc->mode == NORMAL_PARSING);
   assert(doc->block_buffers.size == doc->block_buffers.isize);
@@ -3487,7 +3484,6 @@ void *hoedown_document_render(
   pop_link_refs(doc);
   memset(&doc->link_refs, 0, sizeof(doc->link_refs));
   assert(doc->link_refs__pool.size == doc->link_refs__pool.isize);
-  doc->text->size = 0;
   return result;
 }
 
