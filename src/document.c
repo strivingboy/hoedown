@@ -521,45 +521,40 @@ static inline void unescape_both(hoedown_document *doc, hoedown_buffer *ob, cons
   hoedown_pool_pop(&doc->inline_buffers, intermediate);
 }
 
-// Expand tabs to spaces with a four-character tabstop.
-static inline void expand_tabs(hoedown_buffer *ob, const uint8_t *data, size_t i, size_t size) {
-  size_t mark;
-  size_t isize = ob->size;
-  static const uint8_t *tab = (const uint8_t *)"    ";
-
-  while (i < size) {
-    mark = i;
-    while (1) {
-      // Advance until we find a tab, but keep multi-byte characters in mind
-      while (i < size && (data[i] & 0xc0) != 0x80 && data[i] != '\t') i++;
-      if (i >= size || data[i] == '\t') break;
-      // this byte should not be counted
-      i++; isize++;
-    }
-
-    hoedown_buffer_put(ob, data + mark, i - mark);
-    if (i >= size) break;
-
-    hoedown_buffer_put(ob, tab, 4 - (ob->size - isize) % 4);
-    i++;
-  }
-}
-
-// Preprocesses the input by normalizing linebreaks and expanding tabs.
+// Preprocesses the input by normalizing linebreaks and expanding tabs to a four-character tabstop.
 static inline void normalize_spacing(hoedown_buffer *ob, const uint8_t *data, size_t size) {
-  size_t i = 0, mark;
+  size_t i = 0, line_start = ob->size, mark;
+  static const uint8_t *tab = (const uint8_t *)"    ";
   hoedown_buffer_grow(ob, size);
 
   while (1) {
     mark = i;
-    while (i < size && data[i] != '\n' && data[i] != '\r') i++;
-    expand_tabs(ob, data, mark, i);
+
+    // Advance until we find a tab or different line ending, but keep multi-byte characters in mind
+    while (1) {
+      while (i < size && (data[i] & 0xc0) != 0x80 && data[i] != '\t' && data[i] != '\n' && data[i] != '\r') i++;
+      if (i < size && (data[i] & 0xc0) == 0x80) {
+        // this byte should not be counted
+        i++; line_start++;
+      } else if (i < size && data[i] == '\n') {
+        // just start a new line and move on
+        i++; line_start = ob->size + i - mark;
+      } else break; // action needed for this character
+    }
+
+    // Copy accumulated data
+    hoedown_buffer_put(ob, data + mark, i - mark);
 
     if (i >= size) break;
 
-    if (data[i] == '\r') i++;
-    if (i < size && data[i] == '\n') i++;
-    hoedown_buffer_putc(ob, '\n');
+    // React to the character
+    if (data[i] == '\t') {
+      hoedown_buffer_put(ob, tab, 4 - (ob->size - line_start) % 4);
+    } else {
+      hoedown_buffer_putc(ob, '\n');
+      line_start = ob->size;
+    }
+    i++;
   }
 }
 
