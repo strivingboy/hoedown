@@ -3441,6 +3441,7 @@ void *hoedown_document_render(
   // Preprocess the input
   if (doc->ft & HOEDOWN_FT_PREPROCESS) {
     text = hoedown_pool_get(&doc->block_buffers);
+    text->size = 0;
     normalize_spacing(text, data, size);
     data = text->data;
     size = text->size;
