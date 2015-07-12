@@ -3,7 +3,7 @@
 #include <string.h>
 
 /* Block constructs */
-static void rndr_paragraph(void *target, void *content, int is_tight, const hoedown_renderer_data *data) {}
+static void rndr_paragraph(void *target, void *content, const hoedown_renderer_data *data) {}
 static void rndr_indented_code_block(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {}
 static void rndr_fenced_code_block(void *target, const hoedown_buffer *code, const hoedown_buffer *info, const hoedown_renderer_data *data) {}
 static void rndr_horizontal_rule(void *target, const hoedown_renderer_data *data) {}

@@ -185,18 +185,22 @@ typedef struct hoedown_document hoedown_document;
 
 typedef struct hoedown_internal hoedown_internal;
 
+typedef struct hoedown_renderer hoedown_renderer;
+
 typedef struct hoedown_renderer_data {
-  hoedown_buffer src [5];
   void *opaque;
   void *request;
+  hoedown_buffer src [5];
+  hoedown_features ft;
+  hoedown_renderer *self;
   hoedown_internal *doc;
 } hoedown_renderer_data;
 
-typedef struct hoedown_renderer {
+struct hoedown_renderer {
   void *opaque;
 
   /* Block constructs */
-  void (*paragraph)(void *target, void *content, int is_tight, const hoedown_renderer_data *data);
+  void (*paragraph)(void *target, void *content, const hoedown_renderer_data *data);
   void (*indented_code_block)(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data);
   void (*fenced_code_block)(void *target, const hoedown_buffer *code, const hoedown_buffer *info, const hoedown_renderer_data *data);
   void (*horizontal_rule)(void *target, const hoedown_renderer_data *data);
@@ -233,7 +237,7 @@ typedef struct hoedown_renderer {
 
   void (*render_start)(int is_inline, const hoedown_renderer_data *data);
   void *(*render_end)(void *target, int is_inline, const hoedown_renderer_data *data);
-} hoedown_renderer;
+};
 
 
 /*************

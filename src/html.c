@@ -21,12 +21,14 @@ static void *object_get(int is_inline, hoedown_features ft, hoedown_preview_flag
   hoedown_html_renderer_state *state = data->opaque;
   hoedown_html_renderer_object *target = hoedown_pool_get(&state->objects);
   target->ob->size = 0;
+  target->is_tight = (ft == HOEDOWN_FT_LIST) && (flags & HOEDOWN_PF_LIST_TIGHT);
   return target;
 }
 
 static void object_merge(void *target_, void *content_, int is_inline, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_, *content = content_;
   hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+  target->is_tight = content->is_tight;
 }
 
 static void object_pop(void *target_, int is_inline, const hoedown_renderer_data *data) {
@@ -60,10 +62,10 @@ static void *render_end(void *target_, int is_inline, const hoedown_renderer_dat
 
 // BLOCK CONSTRUCTS
 
-static void rndr_paragraph(void *target_, void *content_, int is_tight, const hoedown_renderer_data *data) {
+static void rndr_paragraph(void *target_, void *content_, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_, *content = content_;
 
-  if (is_tight) {
+  if (target->is_tight) {
     hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
     hoedown_buffer_putc(target->ob, '\n');
   } else {

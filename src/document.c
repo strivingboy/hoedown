@@ -103,7 +103,6 @@ struct hoedown_document {
   block_char_entry *block_chars [256];
   hoedown_pool block_chars__pool;
   parsing_mode mode;
-  size_t is_tight;
   size_t inside_footnote;
 
   // Inline parsing
@@ -1984,7 +1983,7 @@ static inline void parse_paragraph(hoedown_document *doc, void *target, const ui
   parse_inline(doc, content, data + content_start, content_end - content_start, 0);
   set_buffer_data(&doc->data.src[0], data, 0, size);
   set_buffer_data(&doc->data.src[1], data, content_start, content_end);
-  doc->rndr.paragraph(target, content, doc->is_tight == doc->current_nesting, &doc->data);
+  doc->rndr.paragraph(target, content, &doc->data);
   doc->rndr.object_pop(content, 1, &doc->data);
 }
 
@@ -2828,7 +2827,7 @@ static size_t collect_list_items(hoedown_document *doc, const uint8_t *data, siz
 // through `work` and `slices` and renders each individual item, then the list
 // itself.
 static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  size_t i = start, slice, current_is_tight = doc->is_tight;
+  size_t i = start, slice;
   enum parsing_mode current_mode = doc->mode;
   int is_ordered, is_loose = (current_mode == NORMAL_PARSING) ? 0 : 1, number = 0;
   void *content;
@@ -2861,8 +2860,6 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
     set_buffer_data(&doc->data.src[0], data, start, i);
     content = doc->rndr.object_get(0, HOEDOWN_FT_LIST, flags, target, &doc->data);
   }
-  if (!is_loose)
-    doc->is_tight = doc->current_nesting + 1;
 
   size_t offset = 0, source = 0;
   for (slice = 0; slice < slices->size; slice += 2*sizeof(size_t)) {
@@ -2882,8 +2879,6 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
     offset = new_offset;
     source = new_source;
   }
-
-  doc->is_tight = current_is_tight;
 
 
   // 3. Render the list itself
@@ -3421,7 +3416,6 @@ hoedown_document *hoedown_document_new(
   hoedown_pool_init(&doc->block_chars__pool, 4, _new_block_char_entry, _free_pool_item, NULL);
   set_block_chars(doc, features);
   doc->mode = NORMAL_PARSING;
-  doc->is_tight = 0;
   doc->inside_footnote = 0;
 
   // Inline parsing
@@ -3505,7 +3499,6 @@ void *hoedown_document_render(
   assert(doc->current_nesting == 0);
   assert(doc->mode == NORMAL_PARSING);
   assert(doc->block_buffers.size == doc->block_buffers.isize);
-  assert(!doc->is_tight);
   assert(!doc->inside_footnote);
   assert(doc->inline_buffers.size == doc->inline_buffers.isize);
   assert(doc->inline_data == NULL);
