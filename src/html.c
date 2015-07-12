@@ -5,30 +5,44 @@
 #include <string.h>
 #include <assert.h>
 
+static void *new_object(void *opaque) {
+  hoedown_html_renderer_object *target = malloc(sizeof(hoedown_html_renderer_object));
+  target->ob = hoedown_buffer_new(64);
+  return target;
+}
+
+static void free_object(void *target_, void *opaque) {
+  hoedown_html_renderer_object *target = target_;
+  hoedown_buffer_free(target->ob);
+  free(target);
+}
+
 static void *object_get(int is_inline, hoedown_features ft, hoedown_preview_flags flags, void *parent, const hoedown_renderer_data *data) {
   hoedown_html_renderer_state *state = data->opaque;
-  hoedown_buffer *ob = hoedown_pool_get(&state->buffers);
-  ob->size = 0;
-  return ob;
+  hoedown_html_renderer_object *target = hoedown_pool_get(&state->objects);
+  target->ob->size = 0;
+  return target;
 }
 
-static void object_merge(void *target, void *content_, int is_inline, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
-  hoedown_buffer_put(ob, content->data, content->size);
+static void object_merge(void *target_, void *content_, int is_inline, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
 }
 
-static void object_pop(void *target, int is_inline, const hoedown_renderer_data *data) {
+static void object_pop(void *target_, int is_inline, const hoedown_renderer_data *data) {
   hoedown_html_renderer_state *state = data->opaque;
-  hoedown_pool_pop(&state->buffers, target);
+  hoedown_pool_pop(&state->objects, target_);
 }
 
 static void render_start(int is_inline, const hoedown_renderer_data *data) {
 }
 
-static void *render_end(void *target, int is_inline, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void *render_end(void *target_, int is_inline, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
   hoedown_html_renderer_state *state = data->opaque;
-  hoedown_pool_detach(&state->buffers, ob);
+  hoedown_buffer *ob = target->ob;
+  target->ob = hoedown_buffer_new(64);
+  hoedown_pool_pop(&state->objects, target);
 
   // Render the footnotes
   if (state->footnote_count) {
@@ -37,111 +51,111 @@ static void *render_end(void *target, int is_inline, const hoedown_renderer_data
     HOEDOWN_BUFPUTSL(ob, "</ul>\n");
   }
 
-  assert(state->buffers.size == state->buffers.isize);
+  assert(state->objects.size == state->objects.isize);
   state->footnotes->size = 0;
   state->footnote_count = 0;
-  return target;
+  return ob;
 }
 
 
 // BLOCK CONSTRUCTS
 
-static void rndr_paragraph(void *target, void *content_, int is_tight, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_paragraph(void *target_, void *content_, int is_tight, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
   if (is_tight) {
-    hoedown_buffer_put(ob, content->data, content->size);
-    hoedown_buffer_putc(ob, '\n');
+    hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+    hoedown_buffer_putc(target->ob, '\n');
   } else {
-    HOEDOWN_BUFPUTSL(ob, "<p>");
-    hoedown_buffer_put(ob, content->data, content->size);
-    HOEDOWN_BUFPUTSL(ob, "</p>\n");
+    HOEDOWN_BUFPUTSL(target->ob, "<p>");
+    hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+    HOEDOWN_BUFPUTSL(target->ob, "</p>\n");
   }
 }
 
-static void rndr_indented_code_block(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_indented_code_block(void *target_, const hoedown_buffer *code, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(ob, "<pre><code>");
-  hoedown_escape_html(ob, code->data, code->size);
-  HOEDOWN_BUFPUTSL(ob, "</code></pre>\n");
+  HOEDOWN_BUFPUTSL(target->ob, "<pre><code>");
+  hoedown_escape_html(target->ob, code->data, code->size);
+  HOEDOWN_BUFPUTSL(target->ob, "</code></pre>\n");
 }
 
-static void rndr_fenced_code_block(void *target, const hoedown_buffer *code, const hoedown_buffer *info, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
-  HOEDOWN_BUFPUTSL(ob, "<pre><code");
+static void rndr_fenced_code_block(void *target_, const hoedown_buffer *code, const hoedown_buffer *info, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
+  HOEDOWN_BUFPUTSL(target->ob, "<pre><code");
 
   if (info) {
     size_t first_word = 0;
     while (first_word < info->size && info->data[first_word] != ' ') first_word++;
 
-    HOEDOWN_BUFPUTSL(ob, " class=\"language-");
-    hoedown_escape_html(ob, info->data, first_word);
-    hoedown_buffer_putc(ob, '"');
+    HOEDOWN_BUFPUTSL(target->ob, " class=\"language-");
+    hoedown_escape_html(target->ob, info->data, first_word);
+    hoedown_buffer_putc(target->ob, '"');
   }
 
-  hoedown_buffer_putc(ob, '>');
-  hoedown_escape_html(ob, code->data, code->size);
-  HOEDOWN_BUFPUTSL(ob, "</code></pre>\n");
+  hoedown_buffer_putc(target->ob, '>');
+  hoedown_escape_html(target->ob, code->data, code->size);
+  HOEDOWN_BUFPUTSL(target->ob, "</code></pre>\n");
 }
 
-static void rndr_horizontal_rule(void *target, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_horizontal_rule(void *target_, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(ob, "<hr />\n");
+  HOEDOWN_BUFPUTSL(target->ob, "<hr />\n");
 }
 
-static void rndr_atx_header(void *target, void *content_, size_t width, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_atx_header(void *target_, void *content_, size_t width, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
-  hoedown_buffer_printf(ob, "<h%lu>", width);
-  hoedown_buffer_put(ob, content->data, content->size);
-  hoedown_buffer_printf(ob, "</h%lu>\n", width);
+  hoedown_buffer_printf(target->ob, "<h%lu>", width);
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+  hoedown_buffer_printf(target->ob, "</h%lu>\n", width);
 }
 
-static void rndr_setext_header(void *target, void *content_, int is_double, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_setext_header(void *target_, void *content_, int is_double, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
-  hoedown_buffer_put(ob, (uint8_t *)(is_double ? "<h1>" : "<h2>"), 4);
-  hoedown_buffer_put(ob, content->data, content->size);
-  hoedown_buffer_put(ob, (uint8_t *)(is_double ? "</h1>\n" : "</h2>\n"), 6);
+  hoedown_buffer_put(target->ob, (uint8_t *)(is_double ? "<h1>" : "<h2>"), 4);
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+  hoedown_buffer_put(target->ob, (uint8_t *)(is_double ? "</h1>\n" : "</h2>\n"), 6);
 }
 
-static void rndr_list(void *target, void *content_, int is_ordered, int is_tight, int start, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_list(void *target_, void *content_, int is_ordered, int is_tight, int start, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
-  hoedown_buffer_put(ob, (uint8_t *)(is_ordered ? "<ol" : "<ul"), 3);
-  if (start && start != 1) hoedown_buffer_printf(ob, " start=\"%d\"", start);
-  HOEDOWN_BUFPUTSL(ob, ">\n");
+  hoedown_buffer_put(target->ob, (uint8_t *)(is_ordered ? "<ol" : "<ul"), 3);
+  if (start && start != 1) hoedown_buffer_printf(target->ob, " start=\"%d\"", start);
+  HOEDOWN_BUFPUTSL(target->ob, ">\n");
 
-  hoedown_buffer_put(ob, content->data, content->size);
-  hoedown_buffer_put(ob, (uint8_t *)(is_ordered ? "</ol>\n" : "</ul>\n"), 6);
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+  hoedown_buffer_put(target->ob, (uint8_t *)(is_ordered ? "</ol>\n" : "</ul>\n"), 6);
 }
 
-static void rndr_list_item(void *target, void *content_, int is_ordered, int is_tight, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_list_item(void *target_, void *content_, int is_ordered, int is_tight, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
-  HOEDOWN_BUFPUTSL(ob, "<li>");
-  if (!is_tight) hoedown_buffer_putc(ob, '\n');
+  HOEDOWN_BUFPUTSL(target->ob, "<li>");
+  if (!is_tight) hoedown_buffer_putc(target->ob, '\n');
 
-  hoedown_buffer_put(ob, content->data, content->size);
-  if (is_tight && ob->data[ob->size-1] == '\n') ob->size--;
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+  if (is_tight && target->ob->data[target->ob->size-1] == '\n') target->ob->size--;
 
-  HOEDOWN_BUFPUTSL(ob, "</li>\n");
+  HOEDOWN_BUFPUTSL(target->ob, "</li>\n");
 }
 
-static void rndr_quote_block(void *target, void *content_, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_quote_block(void *target_, void *content_, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
-  HOEDOWN_BUFPUTSL(ob, "<blockquote>\n");
-  hoedown_buffer_put(ob, content->data, content->size);
-  HOEDOWN_BUFPUTSL(ob, "</blockquote>\n");
+  HOEDOWN_BUFPUTSL(target->ob, "<blockquote>\n");
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+  HOEDOWN_BUFPUTSL(target->ob, "</blockquote>\n");
 }
 
-static void rndr_html_block(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_html_block(void *target_, const hoedown_buffer *html, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  hoedown_buffer_put(ob, html->data, html->size);
+  hoedown_buffer_put(target->ob, html->data, html->size);
 }
 
 
@@ -162,163 +176,163 @@ static void render_footnote(hoedown_buffer *ob, hoedown_buffer *content, hoedown
 
 // INLINE CONSTRUCTS
 
-static void rndr_string(void *target, const hoedown_buffer *text, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_string(void *target_, const hoedown_buffer *text, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  hoedown_escape_html(ob, text->data, text->size);
+  hoedown_escape_html(target->ob, text->data, text->size);
 }
 
-static void rndr_escape(void *target, uint8_t character, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_escape(void *target_, uint8_t character, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  hoedown_escape_html(ob, &character, 1);
+  hoedown_escape_html(target->ob, &character, 1);
 }
 
-static void rndr_linebreak(void *target, int is_hard, int is_soft, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_linebreak(void *target_, int is_hard, int is_soft, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(ob, "<br />\n");
+  HOEDOWN_BUFPUTSL(target->ob, "<br />\n");
 }
 
-static void rndr_uri_autolink(void *target, const hoedown_buffer *uri, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_uri_autolink(void *target_, const hoedown_buffer *uri, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(ob, "<a href=\"");
-  hoedown_escape_href(ob, uri->data, uri->size);
-  HOEDOWN_BUFPUTSL(ob, "\">");
-  hoedown_escape_html(ob, uri->data, uri->size);
-  HOEDOWN_BUFPUTSL(ob, "</a>");
+  HOEDOWN_BUFPUTSL(target->ob, "<a href=\"");
+  hoedown_escape_href(target->ob, uri->data, uri->size);
+  HOEDOWN_BUFPUTSL(target->ob, "\">");
+  hoedown_escape_html(target->ob, uri->data, uri->size);
+  HOEDOWN_BUFPUTSL(target->ob, "</a>");
 }
 
-static void rndr_email_autolink(void *target, const hoedown_buffer *email, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_email_autolink(void *target_, const hoedown_buffer *email, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(ob, "<a href=\"mailto:");
-  hoedown_escape_href(ob, email->data, email->size);
-  HOEDOWN_BUFPUTSL(ob, "\">");
-  hoedown_escape_html(ob, email->data, email->size);
-  HOEDOWN_BUFPUTSL(ob, "</a>");
+  HOEDOWN_BUFPUTSL(target->ob, "<a href=\"mailto:");
+  hoedown_escape_href(target->ob, email->data, email->size);
+  HOEDOWN_BUFPUTSL(target->ob, "\">");
+  hoedown_escape_html(target->ob, email->data, email->size);
+  HOEDOWN_BUFPUTSL(target->ob, "</a>");
 }
 
-static void rndr_html(void *target, const hoedown_buffer *html, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_html(void *target_, const hoedown_buffer *html, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  hoedown_buffer_put(ob, html->data, html->size);
+  hoedown_buffer_put(target->ob, html->data, html->size);
 }
 
-static void rndr_entity(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_entity(void *target_, const hoedown_buffer *character, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  hoedown_escape_character(ob, character->data, character->size);
+  hoedown_escape_character(target->ob, character->data, character->size);
 }
 
-static void rndr_code(void *target, const hoedown_buffer *code, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_code(void *target_, const hoedown_buffer *code, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(ob, "<code>");
-  hoedown_escape_html(ob, code->data, code->size);
-  HOEDOWN_BUFPUTSL(ob, "</code>");
+  HOEDOWN_BUFPUTSL(target->ob, "<code>");
+  hoedown_escape_html(target->ob, code->data, code->size);
+  HOEDOWN_BUFPUTSL(target->ob, "</code>");
 }
 
-static void rndr_emphasis(void *target, void *content_, size_t width, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_emphasis(void *target_, void *content_, size_t width, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
   int strongs = width / 2, em = width % 2;
 
   for (int i = 0; i < strongs; i++)
-    HOEDOWN_BUFPUTSL(ob, "<strong>");
-  if (em) HOEDOWN_BUFPUTSL(ob, "<em>");
+    HOEDOWN_BUFPUTSL(target->ob, "<strong>");
+  if (em) HOEDOWN_BUFPUTSL(target->ob, "<em>");
 
-  hoedown_buffer_put(ob, content->data, content->size);
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
 
-  if (em) HOEDOWN_BUFPUTSL(ob, "</em>");
+  if (em) HOEDOWN_BUFPUTSL(target->ob, "</em>");
   for (int i = 0; i < strongs; i++)
-    HOEDOWN_BUFPUTSL(ob, "</strong>");
+    HOEDOWN_BUFPUTSL(target->ob, "</strong>");
 }
 
-static void rndr_link(void *target, void *content_, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_link(void *target_, void *content_, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
   if (is_image) {
-    HOEDOWN_BUFPUTSL(ob, "<img src=\"");
-    hoedown_escape_href(ob, dest->data, dest->size);
-    HOEDOWN_BUFPUTSL(ob, "\" alt=\"");
-    hoedown_escape_html(ob, content->data, content->size);
-    hoedown_buffer_putc(ob, '"');
+    HOEDOWN_BUFPUTSL(target->ob, "<img src=\"");
+    hoedown_escape_href(target->ob, dest->data, dest->size);
+    HOEDOWN_BUFPUTSL(target->ob, "\" alt=\"");
+    hoedown_escape_html(target->ob, content->ob->data, content->ob->size);
+    hoedown_buffer_putc(target->ob, '"');
 
     if (title) {
-      HOEDOWN_BUFPUTSL(ob, " title=\"");
-      hoedown_escape_html(ob, title->data, title->size);
-      hoedown_buffer_putc(ob, '"');
+      HOEDOWN_BUFPUTSL(target->ob, " title=\"");
+      hoedown_escape_html(target->ob, title->data, title->size);
+      hoedown_buffer_putc(target->ob, '"');
     }
 
-    HOEDOWN_BUFPUTSL(ob, " />");
+    HOEDOWN_BUFPUTSL(target->ob, " />");
   } else {
-    HOEDOWN_BUFPUTSL(ob, "<a href=\"");
-    hoedown_escape_href(ob, dest->data, dest->size);
-    hoedown_buffer_putc(ob, '"');
+    HOEDOWN_BUFPUTSL(target->ob, "<a href=\"");
+    hoedown_escape_href(target->ob, dest->data, dest->size);
+    hoedown_buffer_putc(target->ob, '"');
 
     if (title) {
-      HOEDOWN_BUFPUTSL(ob, " title=\"");
-      hoedown_escape_html(ob, title->data, title->size);
-      hoedown_buffer_putc(ob, '"');
+      HOEDOWN_BUFPUTSL(target->ob, " title=\"");
+      hoedown_escape_html(target->ob, title->data, title->size);
+      hoedown_buffer_putc(target->ob, '"');
     }
 
-    hoedown_buffer_putc(ob, '>');
-    hoedown_buffer_put(ob, content->data, content->size);
-    HOEDOWN_BUFPUTSL(ob, "</a>");
+    hoedown_buffer_putc(target->ob, '>');
+    hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+    HOEDOWN_BUFPUTSL(target->ob, "</a>");
   }
 }
 
-static void rndr_math(void *target, const hoedown_buffer *math, int is_inline, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_math(void *target_, const hoedown_buffer *math, int is_inline, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  hoedown_buffer_put(ob, (const uint8_t *)(is_inline ? "\\(" : "\\["), 2);
-  hoedown_escape_html(ob, math->data, math->size);
-  hoedown_buffer_put(ob, (const uint8_t *)(is_inline ? "\\)" : "\\]"), 2);
+  hoedown_buffer_put(target->ob, (const uint8_t *)(is_inline ? "\\(" : "\\["), 2);
+  hoedown_escape_html(target->ob, math->data, math->size);
+  hoedown_buffer_put(target->ob, (const uint8_t *)(is_inline ? "\\)" : "\\]"), 2);
 }
 
-static void rndr_superscript(void *target, void *content_, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_superscript(void *target_, void *content_, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
-  HOEDOWN_BUFPUTSL(ob, "<sup>");
-  hoedown_buffer_put(ob, content->data, content->size);
-  HOEDOWN_BUFPUTSL(ob, "</sup>");
+  HOEDOWN_BUFPUTSL(target->ob, "<sup>");
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+  HOEDOWN_BUFPUTSL(target->ob, "</sup>");
 }
 
-static void rndr_strikethrough(void *target, void *content_, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_strikethrough(void *target_, void *content_, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
-  HOEDOWN_BUFPUTSL(ob, "<del>");
-  hoedown_buffer_put(ob, content->data, content->size);
-  HOEDOWN_BUFPUTSL(ob, "</del>");
+  HOEDOWN_BUFPUTSL(target->ob, "<del>");
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+  HOEDOWN_BUFPUTSL(target->ob, "</del>");
 }
 
-static void rndr_highlight(void *target, void *content_, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_highlight(void *target_, void *content_, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
 
-  HOEDOWN_BUFPUTSL(ob, "<mark>");
-  hoedown_buffer_put(ob, content->data, content->size);
-  HOEDOWN_BUFPUTSL(ob, "</mark>");
+  HOEDOWN_BUFPUTSL(target->ob, "<mark>");
+  hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
+  HOEDOWN_BUFPUTSL(target->ob, "</mark>");
 }
 
-static void rndr_sidenote(void *target, void *content_, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target, *content = content_;
+static void rndr_sidenote(void *target_, void *content_, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_, *content = content_;
   hoedown_html_renderer_state *state = data->opaque;
-  render_footnote(ob, content, state);
+  render_footnote(target->ob, content->ob, state);
 }
 
-static void rndr_emoji(void *target, const hoedown_buffer *name, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_emoji(void *target_, const hoedown_buffer *name, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  hoedown_buffer_putc(ob, ':');
-  hoedown_escape_html(ob, name->data, name->size);
-  hoedown_buffer_putc(ob, ':');
+  hoedown_buffer_putc(target->ob, ':');
+  hoedown_escape_html(target->ob, name->data, name->size);
+  hoedown_buffer_putc(target->ob, ':');
 }
 
-static void rndr_typography(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data) {
-  hoedown_buffer *ob = target;
+static void rndr_typography(void *target_, const hoedown_buffer *character, const hoedown_renderer_data *data) {
+  hoedown_html_renderer_object *target = target_;
 
-  hoedown_escape_html(ob, character->data, character->size);
+  hoedown_escape_html(target->ob, character->data, character->size);
 }
 
 
@@ -372,7 +386,7 @@ hoedown_renderer *hoedown_html_renderer_new() {
   memcpy(rndr, &temp, sizeof(hoedown_renderer));
   rndr->opaque = state;
 
-  hoedown_buffer_pool_init(&state->buffers, 16, 64);
+  hoedown_pool_init(&state->objects, 16, new_object, free_object, NULL);
 
   state->footnote_count = 0;
   state->footnotes = hoedown_buffer_new(64);
@@ -384,7 +398,7 @@ void hoedown_html_renderer_free(hoedown_renderer *rndr) {
   if (!rndr) return;
 
   hoedown_html_renderer_state *state = rndr->opaque;
-  hoedown_pool_uninit(&state->buffers);
+  hoedown_pool_uninit(&state->objects);
   hoedown_buffer_free(state->footnotes);
   free(state);
 
