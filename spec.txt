@@ -5868,7 +5868,7 @@ However, links may not contain other links, at any level of nesting.
 .
 ![[[foo](uri1)](uri2)](uri3)
 .
-<p><img src="uri3" alt="[&lt;a href=&quot;uri1&quot;&gt;foo&lt;/a&gt;](uri2)" /></p>
+<p><img src="uri3" alt="[foo](uri2)" /></p>
 .
 
 These cases illustrate the precedence of link text grouping over
@@ -6365,19 +6365,19 @@ this is standardly used as the image's `alt` attribute.
 
 [foo *bar*]: train.jpg "train & tracks"
 .
-<p><img src="train.jpg" alt="foo &lt;em&gt;bar&lt;/em&gt;" title="train &amp; tracks" /></p>
+<p><img src="train.jpg" alt="foo bar" title="train &amp; tracks" /></p>
 .
 
 .
 ![foo ![bar](/url)](/url2)
 .
-<p><img src="/url2" alt="foo &lt;img src=&quot;/url&quot; alt=&quot;bar&quot; /&gt;" /></p>
+<p><img src="/url2" alt="foo bar" /></p>
 .
 
 .
 ![foo [bar](/url)](/url2)
 .
-<p><img src="/url2" alt="foo &lt;a href=&quot;/url&quot;&gt;bar&lt;/a&gt;" /></p>
+<p><img src="/url2" alt="foo bar" /></p>
 .
 
 Though this spec is concerned with parsing, not rendering, it is
@@ -6392,7 +6392,7 @@ content is rendered, without formatting.
 
 [foo *bar*]: train.jpg "train & tracks"
 .
-<p><img src="train.jpg" alt="foo &lt;em&gt;bar&lt;/em&gt;" title="train &amp; tracks" /></p>
+<p><img src="train.jpg" alt="foo bar" title="train &amp; tracks" /></p>
 .
 
 .
@@ -6400,7 +6400,7 @@ content is rendered, without formatting.
 
 [FOOBAR]: train.jpg "train & tracks"
 .
-<p><img src="train.jpg" alt="foo &lt;em&gt;bar&lt;/em&gt;" title="train &amp; tracks" /></p>
+<p><img src="train.jpg" alt="foo bar" title="train &amp; tracks" /></p>
 .
 
 .
@@ -6460,7 +6460,7 @@ Collapsed:
 
 [*foo* bar]: /url "title"
 .
-<p><img src="/url" alt="&lt;em&gt;foo&lt;/em&gt; bar" title="title" /></p>
+<p><img src="/url" alt="foo bar" title="title" /></p>
 .
 
 The labels are case-insensitive:
@@ -6500,7 +6500,7 @@ Shortcut:
 
 [*foo* bar]: /url "title"
 .
-<p><img src="/url" alt="&lt;em&gt;foo&lt;/em&gt; bar" title="title" /></p>
+<p><img src="/url" alt="foo bar" title="title" /></p>
 .
 
 Note that link labels cannot contain unescaped brackets:
