@@ -1,5 +1,6 @@
 #include "document.h"
 
+#include "list.h"
 #include "pool.h"
 #include "escape.h"
 
@@ -88,6 +89,11 @@ typedef struct link_ref {
   int has_title;
 } link_ref;
 
+typedef struct list_item {
+  size_t source_end;
+  size_t work_end;
+} list_item;
+
 struct hoedown_document {
   // Renderer stuff
   hoedown_renderer rndr;
@@ -104,6 +110,7 @@ struct hoedown_document {
   hoedown_pool block_chars__pool;
   parsing_mode mode;
   size_t inside_footnote;
+  hoedown_pool list_cache__pool;
 
   // Inline parsing
   hoedown_pool inline_buffers;
@@ -140,6 +147,15 @@ SIMPLE_ALLOCATOR(inline_nesting)
 
 static void _free_pool_item(void *item, void *opaque) {
   free(item);
+}
+
+void *new_list_cache(void *opaque) {
+  return hoedown_list_new(sizeof(list_item), 8);
+}
+
+void free_list_cache(void *object, void *opaque) {
+  hoedown_list *list = object;
+  hoedown_list_free(list);
 }
 
 
@@ -2775,13 +2791,14 @@ static size_t collect_list_items__lines(hoedown_document *doc, const uint8_t *da
 // functions verify at least one valid list item, and advance through all
 // subsequent items of the same type, collecting and concatenating their
 // contents into the `work` buffer. At the same time, it saves the offsets
-// at which every item's contents ends in a second buffer, `slices`.
+// at which every item's contents ends (and its position in the original
+// source) into the `items` list.
 //
 // Here is where most of the magic happens; lines are tested for lazyness,
 // double empty lines are resolved, etc. As always, if the function returns
 // zero it means no list is started at this position in the input,
 // otherwise the end of the list is returned.
-static size_t collect_list_items(hoedown_document *doc, const uint8_t *data, size_t size, int *is_ordered, int *is_loose, int *number, hoedown_buffer *work, hoedown_buffer *slices) {
+static size_t collect_list_items(hoedown_document *doc, const uint8_t *data, size_t size, int *is_ordered, int *is_loose, int *number, hoedown_buffer *work, hoedown_list *items) {
   uint8_t character;
   size_t i = 0, mark, result, indentation, parsed;
 
@@ -2795,6 +2812,7 @@ static size_t collect_list_items(hoedown_document *doc, const uint8_t *data, siz
 
   while (i < size && result) {
     // Start new item!
+    list_item *item = hoedown_list_puti(items, NULL);
     parsed = work->size;
     i += result;
 
@@ -2810,13 +2828,13 @@ static size_t collect_list_items(hoedown_document *doc, const uint8_t *data, siz
     if (i < size) i++;
     hoedown_buffer_put(work, data + mark, i - mark);
 
-    // Collect rest of the lines
+    // Collect rest of the lines (and parse next item marker)
     result = 0;
     i += collect_list_items__lines(doc, data + i, size - i, *is_ordered, character, indentation, is_loose, work, &result, parsed);
 
-    // End the list item
-    hoedown_buffer_put(slices, (const uint8_t *)&work->size, sizeof(size_t));
-    hoedown_buffer_put(slices, (const uint8_t *)&i, sizeof(size_t));
+    // End the list item (FIXME: limit items per list)
+    item->source_end = i;
+    item->work_end = work->size;
   }
 
   return i;
@@ -2824,31 +2842,31 @@ static size_t collect_list_items(hoedown_document *doc, const uint8_t *data, siz
 
 // This is the main entry point for list parsing. It uses `collect_list_items`
 // above to parse the list items and collect their contents, and then iterates
-// through `work` and `slices` and renders each individual item, then the list
+// through `work` and `items` and renders each individual item, then the list
 // itself.
 static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
-  size_t i = start, slice;
+  size_t i = start;
   enum parsing_mode current_mode = doc->mode;
   int is_ordered, is_loose = (current_mode == NORMAL_PARSING) ? 0 : 1, number = 0;
   void *content;
 
   hoedown_buffer *work = hoedown_pool_get(&doc->block_buffers);
-  hoedown_buffer *slices = hoedown_pool_get(&doc->inline_buffers);
-  work->size = slices->size = 0;
+  hoedown_list *items = hoedown_pool_get(&doc->list_cache__pool);
+  work->size = items->size = 0;
 
   // 1. Collect list items
   doc->mode = DUMB_PARSING;
-  i += collect_list_items(doc, data + i, size - i, &is_ordered, &is_loose, &number, work, slices);
+  i += collect_list_items(doc, data + i, size - i, &is_ordered, &is_loose, &number, work, items);
   doc->mode = current_mode;
 
   if (i == start) {
-    hoedown_pool_pop(&doc->inline_buffers, slices);
+    hoedown_pool_pop(&doc->list_cache__pool, items);
     hoedown_pool_pop(&doc->block_buffers, work);
     return 0;
   }
 
   if (current_mode == DUMB_PARSING) {
-    hoedown_pool_pop(&doc->inline_buffers, slices);
+    hoedown_pool_pop(&doc->list_cache__pool, items);
     hoedown_pool_pop(&doc->block_buffers, work);
     return i;
   }
@@ -2861,23 +2879,24 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
     content = doc->rndr.object_get(0, HOEDOWN_FT_LIST, flags, target, &doc->data);
   }
 
-  size_t offset = 0, source = 0;
-  for (slice = 0; slice < slices->size; slice += 2*sizeof(size_t)) {
-    size_t new_offset = *((size_t *) &slices->data[slice]);
-    size_t new_source = *((size_t *) &slices->data[slice+sizeof(size_t)]);
+  size_t s, source_start = 0, work_start = 0;
+  for (s = 0; s < items->size; s++) {
+    list_item *item = HOEDOWN_LIGET(items, s, list_item);
+    size_t source_end = item->source_end, work_end = item->work_end;
     if (current_mode == NORMAL_PARSING) {
-      set_buffer_data(&doc->data.src[0], work->data, offset, new_offset);
+      set_buffer_data(&doc->data.src[0], work->data, work_start, work_end);
       void *item_content = doc->rndr.object_get(0, HOEDOWN_FT_LIST, flags, content, &doc->data);
-      parse_block(doc, item_content, work->data + offset, new_offset - offset, new_offset - offset, 0);
-      set_buffer_data(&doc->data.src[0], data, source, new_source);
-      set_buffer_data(&doc->data.src[1], work->data, offset, new_offset);
+      parse_block(doc, item_content, work->data + work_start, work_end - work_start, work_end - work_start, 0);
+
+      set_buffer_data(&doc->data.src[0], data + start, source_start, source_end);
+      set_buffer_data(&doc->data.src[1], work->data, work_start, work_end);
       doc->rndr.list_item(content, item_content, is_ordered, !is_loose, &doc->data);
       doc->rndr.object_pop(item_content, 0, &doc->data);
     } else {
-      parse_block(doc, NULL, work->data + offset, new_offset - offset, new_offset - offset, 0);
+      parse_block(doc, NULL, work->data + work_start, work_end - work_start, work_end - work_start, 0);
     }
-    offset = new_offset;
-    source = new_source;
+    source_start = item->source_end;
+    work_start = item->work_end;
   }
 
 
@@ -2890,7 +2909,7 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
     doc->rndr.object_pop(content, 0, &doc->data);
   }
 
-  hoedown_pool_pop(&doc->inline_buffers, slices);
+  hoedown_pool_pop(&doc->list_cache__pool, items);
   hoedown_pool_pop(&doc->block_buffers, work);
   return i;
 }
@@ -3417,6 +3436,7 @@ hoedown_document *hoedown_document_new(
   set_block_chars(doc, features);
   doc->mode = NORMAL_PARSING;
   doc->inside_footnote = 0;
+  hoedown_pool_init(&doc->list_cache__pool, 4, new_list_cache, free_list_cache, NULL);
 
   // Inline parsing
   hoedown_buffer_pool_init(&doc->inline_buffers, 8, 64);
@@ -3446,6 +3466,7 @@ void hoedown_document_free(hoedown_document *doc) {
   // Free the pools
   hoedown_pool_uninit(&doc->block_buffers);
   hoedown_pool_uninit(&doc->block_chars__pool);
+  hoedown_pool_uninit(&doc->list_cache__pool);
   hoedown_pool_uninit(&doc->inline_buffers);
   hoedown_pool_uninit(&doc->inline_chars__pool);
   hoedown_pool_uninit(&doc->inline_data__pool);
@@ -3500,6 +3521,7 @@ void *hoedown_document_render(
   assert(doc->mode == NORMAL_PARSING);
   assert(doc->block_buffers.size == doc->block_buffers.isize);
   assert(!doc->inside_footnote);
+  assert(doc->list_cache__pool.size == doc->list_cache__pool.isize);
   assert(doc->inline_buffers.size == doc->inline_buffers.isize);
   assert(doc->inline_data == NULL);
   assert(doc->inline_data__pool.size == doc->inline_data__pool.isize);
