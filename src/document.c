@@ -1419,7 +1419,7 @@ static size_t parse_link(hoedown_document *doc, void *target, const uint8_t *dat
 
   mark = i;
   set_buffer_data(&doc->data.src[0], data, i, size);
-  content = doc->rndr.object_get(1, HOEDOWN_FT_LINK, is_image ? HOEDOWN_PF_LINK_IMAGE : 0, target, &doc->data);
+  content = doc->rndr.object_get(0, HOEDOWN_FT_LINK, is_image ? HOEDOWN_PF_LINK_IMAGE : 0, target, &doc->data);
   i += parse_inline(doc, content, data + i, size - i, ']');
 
   doc->inside_link = current_inside_link;
@@ -1429,7 +1429,7 @@ static size_t parse_link(hoedown_document *doc, void *target, const uint8_t *dat
 
   // No closing bracket found?
   if (i >= size) {
-    doc->rndr.object_pop(content, 1, &doc->data);
+    doc->rndr.object_pop(content, 0, &doc->data);
     return (doc->plain_links_forbidden) ? size : 0;
   }
 
@@ -1445,7 +1445,7 @@ static size_t parse_link(hoedown_document *doc, void *target, const uint8_t *dat
 
   if (!ref->id) {
     hoedown_pool_pop(&doc->link_refs__pool, ref);
-    doc->rndr.object_pop(content, 1, &doc->data);
+    doc->rndr.object_pop(content, 0, &doc->data);
     return 0;
   }
 
@@ -1454,7 +1454,7 @@ static size_t parse_link(hoedown_document *doc, void *target, const uint8_t *dat
 
   if (!is_image && doc->plain_links_forbidden) {
     hoedown_pool_pop(&doc->link_refs__pool, ref);
-    doc->rndr.object_pop(content, 1, &doc->data);
+    doc->rndr.object_pop(content, 0, &doc->data);
     return size;
   }
 
@@ -1468,7 +1468,7 @@ static size_t parse_link(hoedown_document *doc, void *target, const uint8_t *dat
     set_buffer_data(&doc->data.src[3], ref->title_src.data, 0, ref->title_src.size);
   doc->rndr.link(target, content, ref->dest, ref->has_title ? ref->title : NULL, is_image, &doc->data);
   hoedown_pool_pop(&doc->link_refs__pool, ref);
-  doc->rndr.object_pop(content, 1, &doc->data);
+  doc->rndr.object_pop(content, 0, &doc->data);
   return i;
 }
 
@@ -1626,13 +1626,13 @@ static inline size_t close_emphasis(hoedown_document *doc, const uint8_t *data, 
   // We can't consume this entry completely, create an intermediate
   // target for the outer emphasis content and modify this entry
   set_buffer_data(&doc->data.src[0], data, entry->end - max_width, size);
-  void *intermediate = doc->rndr.object_get(1, HOEDOWN_FT_EMPHASIS, 0, entry->parent, &doc->data);
+  void *intermediate = doc->rndr.object_get(0, HOEDOWN_FT_EMPHASIS, 0, entry->parent, &doc->data);
 
   set_buffer_data(&doc->data.src[0], data, entry->end - max_width, mark + max_width);
   set_buffer_data(&doc->data.src[1], data, entry->end, mark);
   doc->rndr.emphasis(intermediate, doc->inline_data->target, max_width, &doc->data);
 
-  doc->rndr.object_pop(doc->inline_data->target, 1, &doc->data);
+  doc->rndr.object_pop(doc->inline_data->target, 0, &doc->data);
   doc->inline_data->target = intermediate;
   entry->end -= max_width;
   return max_width;
@@ -1782,12 +1782,12 @@ static size_t parse_superscript(hoedown_document *doc, void *target, const uint8
   parse_string(doc, target, data + parsed, start - parsed);
 
   set_buffer_data(&doc->data.src[0], data, mark, i);
-  void *content = doc->rndr.object_get(1, HOEDOWN_FT_SUPERSCRIPT, 0, target, &doc->data);
+  void *content = doc->rndr.object_get(0, HOEDOWN_FT_SUPERSCRIPT, 0, target, &doc->data);
   parse_string(doc, content, data + mark, i - mark);
   set_buffer_data(&doc->data.src[0], data, start, i);
   set_buffer_data(&doc->data.src[1], data, mark, i);
   doc->rndr.superscript(target, content, &doc->data);
-  doc->rndr.object_pop(content, 1, &doc->data);
+  doc->rndr.object_pop(content, 0, &doc->data);
   return i;
 }
 
@@ -1995,12 +1995,12 @@ static inline void parse_paragraph(hoedown_document *doc, void *target, const ui
   while (content_end > content_start && is_space(data[content_end-1])) content_end--;
 
   set_buffer_data(&doc->data.src[0], data, content_start, content_end);
-  void *content = doc->rndr.object_get(1, 0, 0, target, &doc->data);
+  void *content = doc->rndr.object_get(0, 0, 0, target, &doc->data);
   parse_inline(doc, content, data + content_start, content_end - content_start, 0);
   set_buffer_data(&doc->data.src[0], data, 0, size);
   set_buffer_data(&doc->data.src[1], data, content_start, content_end);
   doc->rndr.paragraph(target, content, &doc->data);
-  doc->rndr.object_pop(content, 1, &doc->data);
+  doc->rndr.object_pop(content, 0, &doc->data);
 }
 
 static inline size_t parse_atx_header_end(const uint8_t *data, size_t size) {
@@ -2060,13 +2060,13 @@ static size_t parse_atx_header(hoedown_document *doc, void *target, const uint8_
     parse_paragraph(doc, target, data + parsed, start - parsed);
 
     set_buffer_data(&doc->data.src[0], data, content_start, mark);
-    void *content = doc->rndr.object_get(1, HOEDOWN_FT_ATX_HEADER, (hoedown_preview_flags)width, target, &doc->data);
+    void *content = doc->rndr.object_get(0, HOEDOWN_FT_ATX_HEADER, (hoedown_preview_flags)width, target, &doc->data);
     parse_inline(doc, content, data + content_start, mark - content_start, 0);
 
     set_buffer_data(&doc->data.src[0], data, start, i);
     set_buffer_data(&doc->data.src[1], data, content_start, mark);
     doc->rndr.atx_header(target, content, width, &doc->data);
-    doc->rndr.object_pop(content, 1, &doc->data);
+    doc->rndr.object_pop(content, 0, &doc->data);
   }
 
   return i;
@@ -2121,13 +2121,13 @@ static size_t parse_setext_header(hoedown_document *doc, void *target, const uin
 
     set_buffer_data(&doc->data.src[0], data, content_start, content_end);
     hoedown_preview_flags flags = (character == '=') ? HOEDOWN_PF_SETEXT_HEADER_DOUBLE : 0;
-    void *content = doc->rndr.object_get(1, HOEDOWN_FT_SETEXT_HEADER, flags, target, &doc->data);
+    void *content = doc->rndr.object_get(0, HOEDOWN_FT_SETEXT_HEADER, flags, target, &doc->data);
     parse_inline(doc, content, data + content_start, content_end - content_start, 0);
 
     set_buffer_data(&doc->data.src[0], data, start, i);
     set_buffer_data(&doc->data.src[1], data, content_start, content_end);
     doc->rndr.setext_header(target, content, character == '=', &doc->data);
-    doc->rndr.object_pop(content, 1, &doc->data);
+    doc->rndr.object_pop(content, 0, &doc->data);
   }
 
   return i;
@@ -2645,7 +2645,7 @@ static size_t parse_quote_block(hoedown_document *doc, void *target, const uint8
 
   if (doc->mode == NORMAL_PARSING) {
     set_buffer_data(&doc->data.src[0], data, start, size);
-    content = doc->rndr.object_get(0, HOEDOWN_FT_QUOTE_BLOCK, 0, target, &doc->data);
+    content = doc->rndr.object_get(1, HOEDOWN_FT_QUOTE_BLOCK, 0, target, &doc->data);
   }
 
   // Collect first line
@@ -2664,7 +2664,7 @@ static size_t parse_quote_block(hoedown_document *doc, void *target, const uint8
     set_buffer_data(&doc->data.src[0], data, start, i);
     set_buffer_data(&doc->data.src[1], work->data, 0, work->size);
     doc->rndr.quote_block(target, content, &doc->data);
-    doc->rndr.object_pop(content, 0, &doc->data);
+    doc->rndr.object_pop(content, 1, &doc->data);
   }
 
   hoedown_pool_pop(&doc->block_buffers, work);
@@ -2878,7 +2878,7 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
     if (!is_loose) flags |= HOEDOWN_PF_LIST_TIGHT;
     if (is_ordered) flags |= HOEDOWN_PF_LIST_ORDERED;
     set_buffer_data(&doc->data.src[0], data, start, i);
-    content = doc->rndr.object_get(0, HOEDOWN_FT_LIST, flags, target, &doc->data);
+    content = doc->rndr.object_get(1, HOEDOWN_FT_LIST, flags, target, &doc->data);
     flags |= HOEDOWN_PF_LIST_ITEM;
   }
 
@@ -2888,13 +2888,13 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
     size_t source_end = item->source_end, work_end = item->work_end;
     if (current_mode == NORMAL_PARSING) {
       set_buffer_data(&doc->data.src[0], work->data, work_start, work_end);
-      void *item_content = doc->rndr.object_get(0, HOEDOWN_FT_LIST, flags, content, &doc->data);
+      void *item_content = doc->rndr.object_get(1, HOEDOWN_FT_LIST, flags, content, &doc->data);
       parse_block(doc, item_content, work->data + work_start, work_end - work_start, work_end - work_start, 0);
 
       set_buffer_data(&doc->data.src[0], data + start, source_start, source_end);
       set_buffer_data(&doc->data.src[1], work->data, work_start, work_end);
       doc->rndr.list_item(content, item_content, is_ordered, !is_loose, &doc->data);
-      doc->rndr.object_pop(item_content, 0, &doc->data);
+      doc->rndr.object_pop(item_content, 1, &doc->data);
     } else {
       parse_block(doc, NULL, work->data + work_start, work_end - work_start, work_end - work_start, 0);
     }
@@ -2909,7 +2909,7 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
     set_buffer_data(&doc->data.src[0], data, start, i);
     set_buffer_data(&doc->data.src[1], data, start, i);
     doc->rndr.list(target, content, is_ordered, !is_loose, number, &doc->data);
-    doc->rndr.object_pop(content, 0, &doc->data);
+    doc->rndr.object_pop(content, 1, &doc->data);
   }
 
   hoedown_pool_pop(&doc->list_cache__pool, items);
@@ -3299,8 +3299,8 @@ static void discard_nestings(hoedown_document *doc, inline_nesting *top) {
   // Discard entries until `top` is reached
   for (entry = data->nesting; entry != top; entry = entry->previous) {
     parse_string(doc, entry->parent, data->data + entry->parsed, entry->end - entry->parsed);
-    doc->rndr.object_merge(entry->parent, data->target, 1, &doc->data);
-    doc->rndr.object_pop(data->target, 1, &doc->data);
+    doc->rndr.object_merge(entry->parent, data->target, 0, &doc->data);
+    doc->rndr.object_pop(data->target, 0, &doc->data);
     data->target = entry->parent;
     doc->current_nesting--;
     hoedown_pool_pop(&doc->inline_nesting__pool, entry);
@@ -3321,7 +3321,7 @@ static inline_nesting *open_nesting(hoedown_document *doc, hoedown_features ft, 
   entry->end = end;
 
   set_buffer_data(&doc->data.src[0], odata, end, osize);
-  doc->inline_data->target = doc->rndr.object_get(1, ft, flags, entry->parent, &doc->data);
+  doc->inline_data->target = doc->rndr.object_get(0, ft, flags, entry->parent, &doc->data);
   assert(doc->current_nesting < doc->max_nesting);
   doc->current_nesting++;
   entry->previous = data->nesting;
@@ -3334,7 +3334,7 @@ static void close_nesting(hoedown_document *doc, inline_nesting *entry) {
   inline_data *data = doc->inline_data;
   assert(data->nesting == entry);
 
-  doc->rndr.object_pop(data->target, 1, &doc->data);
+  doc->rndr.object_pop(data->target, 0, &doc->data);
   data->target = entry->parent;
   doc->current_nesting--;
   data->nesting = entry->previous;
@@ -3485,7 +3485,7 @@ void hoedown_document_free(hoedown_document *doc) {
 void *hoedown_document_render(
   hoedown_document *doc,
   const uint8_t *data, size_t size,
-  int is_inline, void *request
+  int is_block, void *request
 ) {
   const uint8_t *odata = data;
   size_t osize = size;
@@ -3503,23 +3503,23 @@ void *hoedown_document_render(
   // Prepare
   doc->data.request = request;
   set_buffer_data(&doc->data.src[0], odata, 0, osize);
-  doc->rndr.render_start(is_inline, &doc->data);
+  doc->rndr.render_start(is_block, &doc->data);
   set_buffer_data(&doc->data.src[0], data, 0, size);
-  void *target = doc->rndr.object_get(is_inline, 0, 0, NULL, &doc->data);
+  void *target = doc->rndr.object_get(is_block, 0, 0, NULL, &doc->data);
 
   // Render!
-  if (is_inline)
-    parse_inline(doc, target, data, size, 0);
-  else {
+  if (is_block) {
     doc->mode = MARKER_PARSING;
     parse_block(doc, NULL, data, size, size, 0);
     doc->mode = NORMAL_PARSING;
     parse_block(doc, target, data, size, size, 0);
+  } else {
+    parse_inline(doc, target, data, size, 0);
   }
 
   // Finish & cleanup
   set_buffer_data(&doc->data.src[0], odata, 0, osize);
-  void *result = doc->rndr.render_end(target, is_inline, &doc->data);
+  void *result = doc->rndr.render_end(target, is_block, &doc->data);
 
   if (text) hoedown_pool_pop(&doc->block_buffers, text);
   assert(doc->current_nesting == 0);

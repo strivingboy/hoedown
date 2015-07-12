@@ -233,12 +233,12 @@ struct hoedown_renderer {
   void (*typography)(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data);
 
   /* Global callbacks (mandatory) */
-  void *(*object_get)(int is_inline, hoedown_features feature, hoedown_preview_flags flags, void *parent, const hoedown_renderer_data *data);
-  void (*object_merge)(void *target, void *content, int is_inline, const hoedown_renderer_data *data);
-  void (*object_pop)(void *target, int is_inline, const hoedown_renderer_data *data);
+  void *(*object_get)(int is_block, hoedown_features feature, hoedown_preview_flags flags, void *parent, const hoedown_renderer_data *data);
+  void (*object_merge)(void *target, void *content, int is_block, const hoedown_renderer_data *data);
+  void (*object_pop)(void *target, int is_block, const hoedown_renderer_data *data);
 
-  void (*render_start)(int is_inline, const hoedown_renderer_data *data);
-  void *(*render_end)(void *target, int is_inline, const hoedown_renderer_data *data);
+  void (*render_start)(int is_block, const hoedown_renderer_data *data);
+  void *(*render_end)(void *target, int is_block, const hoedown_renderer_data *data);
 };
 
 
@@ -267,7 +267,7 @@ hoedown_document *hoedown_document_new(
 void *hoedown_document_render(
   hoedown_document *doc,
   const uint8_t *data, size_t size,
-  int is_inline, void *request
+  int is_block, void *request
 );
 
 /* hoedown_document_free: deallocate a document processor */

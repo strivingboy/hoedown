@@ -186,7 +186,7 @@ struct option_data {
   enum renderer_type renderer;
 
   /* parsing */
-  int is_inline;
+  int is_block;
   hoedown_features features;
   size_t max_nesting;
 };
@@ -321,12 +321,12 @@ static int parse_long_option(char *opt, char *next, void *opaque) {
   }
 
   if (strcmp(opt, "block")==0) {
-    data->is_inline = 0;
+    data->is_block = 1;
     return 1;
   }
 
   if (strcmp(opt, "inline")==0) {
-    data->is_inline = 1;
+    data->is_block = 0;
     return 1;
   }
 
@@ -389,7 +389,7 @@ int main(int argc, char **argv) {
   data.iunit = DEF_IUNIT;
   data.filename = NULL;
   data.renderer = RENDERER_HTML;
-  data.is_inline = 0;
+  data.is_block = 1;
   data.max_nesting = DEF_MAX_NESTING;
   data.features = presets_info[0].flags;
 
@@ -432,7 +432,7 @@ int main(int argc, char **argv) {
   document = hoedown_document_new(renderer, data.features, data.max_nesting);
 
   t1 = clock();
-  ob = hoedown_document_render(document, ib->data, ib->size, data.is_inline, NULL);
+  ob = hoedown_document_render(document, ib->data, ib->size, data.is_block, NULL);
   t2 = clock();
 
   /* Cleanup */
