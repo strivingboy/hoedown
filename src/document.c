@@ -3420,8 +3420,10 @@ hoedown_document *hoedown_document_new(
 
   // Renderer stuff
   memcpy(&doc->rndr, renderer, sizeof(hoedown_renderer));
-  doc->data.doc = (hoedown_internal *)doc;
   doc->data.opaque = renderer->opaque;
+  doc->data.ft = features;
+  doc->data.self = renderer;
+  doc->data.doc = (hoedown_internal *)doc;
   memset(&doc->data.src, 0, sizeof(doc->data.src));
 
   // Common parsing

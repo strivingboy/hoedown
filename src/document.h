@@ -192,7 +192,7 @@ typedef struct hoedown_renderer_data {
   void *request;
   hoedown_buffer src [5];
   hoedown_features ft;
-  hoedown_renderer *self;
+  const hoedown_renderer *self;
   hoedown_internal *doc;
 } hoedown_renderer_data;
 
