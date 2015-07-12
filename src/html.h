@@ -27,6 +27,7 @@ typedef struct hoedown_html_renderer_object {
   void *opaque;
   hoedown_buffer *ob;
   int is_tight;
+  int render_tags;
 } hoedown_html_renderer_object;
 
 

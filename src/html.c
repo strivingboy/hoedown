@@ -17,11 +17,16 @@ static void free_object(void *target_, void *opaque) {
   free(target);
 }
 
-static void *object_get(int is_inline, hoedown_features ft, hoedown_preview_flags flags, void *parent, const hoedown_renderer_data *data) {
+static void *object_get(int is_inline, hoedown_features ft, hoedown_preview_flags flags, void *parent_, const hoedown_renderer_data *data) {
   hoedown_html_renderer_state *state = data->opaque;
   hoedown_html_renderer_object *target = hoedown_pool_get(&state->objects);
+  hoedown_html_renderer_object *parent = parent_;
   target->ob->size = 0;
   target->is_tight = (ft == HOEDOWN_FT_LIST) && (flags & HOEDOWN_PF_LIST_TIGHT);
+  target->render_tags = (parent == NULL) || parent->render_tags;
+
+  if ((ft == HOEDOWN_FT_LINK) && (flags & HOEDOWN_PF_LINK_IMAGE))
+    target->render_tags = 0;
   return target;
 }
 
@@ -167,7 +172,7 @@ static void render_footnote(hoedown_buffer *ob, hoedown_buffer *content, hoedown
   int num = ++state->footnote_count;
 
   // Render the footnote reference
-  hoedown_buffer_printf(ob, "<sup id=\"fnref-%1$d\"><a href=\"#fn-%1$d\" rel=\"footnote\">%1$d</a></sup>", num);
+  hoedown_buffer_printf(ob, "<sup id=\"fnref-%1$d\"><a href=\"#fn-%1$d\" rel=\"footnote\">%1$d</a></sup>", num);//FIXME
 
   // Render the footnote itself
   hoedown_buffer_printf(state->footnotes, "<li id=\"fn-%1$d\">", num);
@@ -193,33 +198,39 @@ static void rndr_escape(void *target_, uint8_t character, const hoedown_renderer
 static void rndr_linebreak(void *target_, int is_hard, int is_soft, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(target->ob, "<br />\n");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "<br />\n");
+  else hoedown_buffer_putc(target->ob, '\n');
 }
 
 static void rndr_uri_autolink(void *target_, const hoedown_buffer *uri, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(target->ob, "<a href=\"");
-  hoedown_escape_href(target->ob, uri->data, uri->size);
-  HOEDOWN_BUFPUTSL(target->ob, "\">");
+  if (target->render_tags) {
+    HOEDOWN_BUFPUTSL(target->ob, "<a href=\"");
+    hoedown_escape_href(target->ob, uri->data, uri->size);
+    HOEDOWN_BUFPUTSL(target->ob, "\">");
+  }
   hoedown_escape_html(target->ob, uri->data, uri->size);
-  HOEDOWN_BUFPUTSL(target->ob, "</a>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "</a>");
 }
 
 static void rndr_email_autolink(void *target_, const hoedown_buffer *email, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(target->ob, "<a href=\"mailto:");
-  hoedown_escape_href(target->ob, email->data, email->size);
-  HOEDOWN_BUFPUTSL(target->ob, "\">");
+  if (target->render_tags) {
+    HOEDOWN_BUFPUTSL(target->ob, "<a href=\"mailto:");
+    hoedown_escape_href(target->ob, email->data, email->size);
+    HOEDOWN_BUFPUTSL(target->ob, "\">");
+  }
   hoedown_escape_html(target->ob, email->data, email->size);
-  HOEDOWN_BUFPUTSL(target->ob, "</a>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "</a>");
 }
 
 static void rndr_html(void *target_, const hoedown_buffer *html, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_;
 
-  hoedown_buffer_put(target->ob, html->data, html->size);
+  if (target->render_tags)
+    hoedown_buffer_put(target->ob, html->data, html->size);
 }
 
 static void rndr_entity(void *target_, const hoedown_buffer *character, const hoedown_renderer_data *data) {
@@ -231,34 +242,46 @@ static void rndr_entity(void *target_, const hoedown_buffer *character, const ho
 static void rndr_code(void *target_, const hoedown_buffer *code, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_;
 
-  HOEDOWN_BUFPUTSL(target->ob, "<code>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "<code>");
   hoedown_escape_html(target->ob, code->data, code->size);
-  HOEDOWN_BUFPUTSL(target->ob, "</code>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "</code>");
 }
 
 static void rndr_emphasis(void *target_, void *content_, size_t width, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_, *content = content_;
   int strongs = width / 2, em = width % 2;
 
-  for (int i = 0; i < strongs; i++)
-    HOEDOWN_BUFPUTSL(target->ob, "<strong>");
-  if (em) HOEDOWN_BUFPUTSL(target->ob, "<em>");
+  if (target->render_tags) {
+    for (int i = 0; i < strongs; i++)
+      HOEDOWN_BUFPUTSL(target->ob, "<strong>");
+    if (em) HOEDOWN_BUFPUTSL(target->ob, "<em>");
+  }
 
   hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
 
-  if (em) HOEDOWN_BUFPUTSL(target->ob, "</em>");
-  for (int i = 0; i < strongs; i++)
-    HOEDOWN_BUFPUTSL(target->ob, "</strong>");
+  if (target->render_tags) {
+    if (em) HOEDOWN_BUFPUTSL(target->ob, "</em>");
+    for (int i = 0; i < strongs; i++)
+      HOEDOWN_BUFPUTSL(target->ob, "</strong>");
+  }
 }
 
 static void rndr_link(void *target_, void *content_, const hoedown_buffer *dest, const hoedown_buffer *title, int is_image, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_, *content = content_;
 
+  if (!target->render_tags) {
+    hoedown_escape_html(target->ob, content->ob->data, content->ob->size);
+    return;
+  }
+
   if (is_image) {
     HOEDOWN_BUFPUTSL(target->ob, "<img src=\"");
     hoedown_escape_href(target->ob, dest->data, dest->size);
     HOEDOWN_BUFPUTSL(target->ob, "\" alt=\"");
-    hoedown_escape_html(target->ob, content->ob->data, content->ob->size);
+    if (target->render_tags)
+      hoedown_escape_html(target->ob, content->ob->data, content->ob->size);
+    else
+      hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
     hoedown_buffer_putc(target->ob, '"');
 
     if (title) {
@@ -296,25 +319,25 @@ static void rndr_math(void *target_, const hoedown_buffer *math, int is_inline, 
 static void rndr_superscript(void *target_, void *content_, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_, *content = content_;
 
-  HOEDOWN_BUFPUTSL(target->ob, "<sup>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "<sup>");
   hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
-  HOEDOWN_BUFPUTSL(target->ob, "</sup>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "</sup>");
 }
 
 static void rndr_strikethrough(void *target_, void *content_, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_, *content = content_;
 
-  HOEDOWN_BUFPUTSL(target->ob, "<del>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "<del>");
   hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
-  HOEDOWN_BUFPUTSL(target->ob, "</del>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "</del>");
 }
 
 static void rndr_highlight(void *target_, void *content_, const hoedown_renderer_data *data) {
   hoedown_html_renderer_object *target = target_, *content = content_;
 
-  HOEDOWN_BUFPUTSL(target->ob, "<mark>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "<mark>");
   hoedown_buffer_put(target->ob, content->ob->data, content->ob->size);
-  HOEDOWN_BUFPUTSL(target->ob, "</mark>");
+  if (target->render_tags) HOEDOWN_BUFPUTSL(target->ob, "</mark>");
 }
 
 static void rndr_sidenote(void *target_, void *content_, const hoedown_renderer_data *data) {
