@@ -61,6 +61,7 @@ if (BUILD_CLI)
   get_target_property(HOEDOWN_LOCATION hoedown LOCATION)
   add_custom_target(test
     python3 CommonMark/test/spec_tests.py --spec spec.txt --program "${HOEDOWN_LOCATION}"
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     DEPENDS hoedown
   )
 endif (BUILD_CLI)
