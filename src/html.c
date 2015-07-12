@@ -6,7 +6,7 @@
 #include <assert.h>
 
 static void *new_object(void *opaque) {
-  hoedown_html_renderer_object *target = malloc(sizeof(hoedown_html_renderer_object));
+  hoedown_html_renderer_object *target = hoedown_malloc(sizeof(hoedown_html_renderer_object));
   target->ob = hoedown_buffer_new(64);
   return target;
 }

@@ -19,6 +19,9 @@ typedef struct hoedown_list {
   size_t size;
   size_t asize;
   size_t unit;
+
+  hoedown_realloc_callback data_realloc;
+  hoedown_free_callback data_free;
 } hoedown_list;
 
 
@@ -30,8 +33,19 @@ typedef struct hoedown_list {
 void hoedown_list_init(
   hoedown_list *list,
   size_t unit,
-  size_t initial_size
+  size_t initial_size,
+  hoedown_realloc_callback data_realloc,
+  hoedown_free_callback data_free
 );
+
+/* hoedown_list_uninit: uninitialize a list of objects */
+void hoedown_list_uninit(hoedown_list *list);
+
+/* hoedown_list_new: allocate a new list */
+hoedown_list *hoedown_list_new(size_t unit, size_t initial_size) __attribute__ ((malloc));
+
+/* hoedown_list_free: deallocate a list */
+void hoedown_list_free(hoedown_list *list);
 
 /* hoedown_list_get: get internal (temporary) pointer to an object */
 void *hoedown_list_get(hoedown_list *list, size_t idx);
@@ -47,9 +61,6 @@ void *hoedown_list_puti(hoedown_list *list, const void *data);
 
 /* hoedown_list_pop: remove the last element of the list */
 void *hoedown_list_pop(hoedown_list *list, void *data);
-
-/* hoedown_list_uninit: uninitialize a list of objects */
-void hoedown_list_uninit(hoedown_list *list);
 
 
 /* HOEDOWN_LIGET: Optimized hoedown_list_get of an item */
