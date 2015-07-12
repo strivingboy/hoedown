@@ -1588,18 +1588,54 @@ static size_t parse_entity(hoedown_document *doc, void *target, const uint8_t *d
   return 0;
 }
 
+// Close and render an emphasis entry using [part of] a delimiter run of
+// `max_width` characters starting at `mark`. Returns how many characters
+// of the delimiter run were consumed.
+static inline size_t close_emphasis(hoedown_document *doc, const uint8_t *data, size_t mark, size_t max_width, inline_nesting *entry) {
+  size_t width = entry->end - entry->start;
+  discard_nestings(doc, entry);
+
+  if (width <= max_width) {
+    // Awesome, we can close this emphasis entry completely
+    parse_string(doc, entry->parent, data + entry->parsed, entry->start - entry->parsed);
+
+    set_buffer_data(&doc->data.src[0], data, entry->start, mark + width);
+    set_buffer_data(&doc->data.src[1], data, entry->end, mark);
+    doc->rndr.emphasis(entry->parent, doc->inline_data->target, width, &doc->data);
+
+    close_nesting(doc, entry);
+    return width;
+  }
+
+  // We can't consume this entry completely, create an intermediate
+  // target for the outer emphasis content and modify this entry
+  void *intermediate = doc->rndr.object_get(1, &doc->data);
+
+  set_buffer_data(&doc->data.src[0], data, entry->end - max_width, mark + max_width);
+  set_buffer_data(&doc->data.src[1], data, entry->end, mark);
+  doc->rndr.emphasis(intermediate, doc->inline_data->target, max_width, &doc->data);
+
+  doc->rndr.object_pop(doc->inline_data->target, 1, &doc->data);
+  doc->inline_data->target = intermediate;
+  entry->end -= max_width;
+  return max_width;
+}
+
 // data[start] is assumed to be '*' or '_'
 static size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t *data, size_t parsed, size_t start, size_t size) {
   uint8_t delimiter = data[start];
-  size_t i = start + 1, mark = start, width;
+  size_t i = start + 1, mark = start;
   int no_intra = !(doc->ft & HOEDOWN_FT_INTRA_EMPHASIS);
   int can_open, can_close;
   inline_nesting *entry;
 
-  // Refuse to process the same delimiter again, otherwise advance
+  // Refuse to process the same delimiter again
   if (start > parsed && data[start-1] == delimiter) return 0;
+
+  // Advance `i` until the end of the delimiter run is reached
   while (i < size && data[i] == delimiter) i++;
 
+  // Test for a valid delimiter
   if (i - mark > 2 * doc->max_nesting) return 0;
   can_open = is_left_flanking(data, start, i, size);
   can_close = is_right_flanking(data, start, i, size);
@@ -1611,28 +1647,9 @@ static size_t parse_emphasis(hoedown_document *doc, void *target, const uint8_t 
       if (entry->ft != HOEDOWN_FT_EMPHASIS || data[entry->start] != delimiter) continue;
 
       // Found a valid entry to close! Yay!
-      discard_nestings(doc, entry);
-      width = entry->end - entry->start;
-      if (width > i - mark) width = i - mark;
       parse_string(doc, doc->inline_data->target, data + parsed, mark - parsed);
-
-      set_buffer_data(&doc->data.src[0], data, entry->end - width, mark + width);
-      set_buffer_data(&doc->data.src[1], data, entry->end, mark);
-      mark += width;
-      parsed = mark;
-
-      // Render emphasis and [partially] close the nesting
-      if (width < entry->end - entry->start) {
-        void *intermediate = doc->rndr.object_get(1, &doc->data);
-        doc->rndr.emphasis(intermediate, doc->inline_data->target, width, &doc->data);
-        doc->rndr.object_pop(doc->inline_data->target, 1, &doc->data);
-        doc->inline_data->target = intermediate;
-        entry->end -= width;
-      } else {
-        parse_string(doc, entry->parent, data + entry->parsed, entry->start - entry->parsed);
-        doc->rndr.emphasis(entry->parent, doc->inline_data->target, width, &doc->data);
-        close_nesting(doc, entry);
-      }
+      size_t width = close_emphasis(doc, data, mark, i - mark, entry);
+      parsed = mark = mark + width;
     }
   }
 
