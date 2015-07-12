@@ -34,7 +34,7 @@ static void rndr_emoji(void *target, const hoedown_buffer *name, const hoedown_r
 static void rndr_typography(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data) {}
 
 /* Global callbacks */
-static void *object_get(int is_inline, const hoedown_renderer_data *data) { return NULL; }
+static void *object_get(int is_inline, hoedown_features feature, hoedown_preview_flags flags, void *parent, const hoedown_renderer_data *data) { return NULL; }
 static void object_merge(void *target, void *content, int is_inline, const hoedown_renderer_data *data) {}
 static void object_pop(void *target, int is_inline, const hoedown_renderer_data *data) {}
 

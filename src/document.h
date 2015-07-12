@@ -165,6 +165,16 @@ extern "C" {
 0)
 
 
+/* PREVIEW FLAGS */
+
+typedef enum hoedown_preview_flags {
+  HOEDOWN_PF_ATX_HEADER_LEVEL_MASK = (1 << 3) - 1,
+  HOEDOWN_PF_SETEXT_HEADER_DOUBLE = 1 << 0,
+  HOEDOWN_PF_LIST_TIGHT = 1 << 0,
+  HOEDOWN_PF_LINK_IMAGE = 1 << 0,
+} hoedown_preview_flags;
+
+
 /*********
  * TYPES *
  *********/
@@ -217,7 +227,7 @@ typedef struct hoedown_renderer {
   void (*typography)(void *target, const hoedown_buffer *character, const hoedown_renderer_data *data);
 
   /* Global callbacks (mandatory) */
-  void *(*object_get)(int is_inline, const hoedown_renderer_data *data);
+  void *(*object_get)(int is_inline, hoedown_features feature, hoedown_preview_flags flags, void *parent, const hoedown_renderer_data *data);
   void (*object_merge)(void *target, void *content, int is_inline, const hoedown_renderer_data *data);
   void (*object_pop)(void *target, int is_inline, const hoedown_renderer_data *data);
 

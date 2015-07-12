@@ -5,7 +5,7 @@
 #include <string.h>
 #include <assert.h>
 
-static void *object_get(int is_inline, const hoedown_renderer_data *data) {
+static void *object_get(int is_inline, hoedown_features ft, hoedown_preview_flags flags, void *parent, const hoedown_renderer_data *data) {
   hoedown_html_renderer_state *state = data->opaque;
   hoedown_buffer *ob = hoedown_pool_get(&state->buffers);
   ob->size = 0;
