@@ -170,7 +170,9 @@ extern "C" {
 typedef enum hoedown_preview_flags {
   HOEDOWN_PF_ATX_HEADER_LEVEL_MASK = (1 << 3) - 1,
   HOEDOWN_PF_SETEXT_HEADER_DOUBLE = 1 << 0,
-  HOEDOWN_PF_LIST_TIGHT = 1 << 0,
+  HOEDOWN_PF_LIST_ITEM = 1 << 0,
+  HOEDOWN_PF_LIST_TIGHT = 1 << 1,
+  HOEDOWN_PF_LIST_ORDERED = 1 << 2,
   HOEDOWN_PF_LINK_IMAGE = 1 << 0,
 } hoedown_preview_flags;
 

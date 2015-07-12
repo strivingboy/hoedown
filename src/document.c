@@ -2873,10 +2873,13 @@ static size_t parse_list(hoedown_document *doc, void *target, const uint8_t *dat
 
 
   // 2. Parse / render list items
-  hoedown_preview_flags flags = (!is_loose) ? HOEDOWN_PF_LIST_TIGHT : 0;
+  hoedown_preview_flags flags = 0;
   if (current_mode == NORMAL_PARSING) {
+    if (!is_loose) flags |= HOEDOWN_PF_LIST_TIGHT;
+    if (is_ordered) flags |= HOEDOWN_PF_LIST_ORDERED;
     set_buffer_data(&doc->data.src[0], data, start, i);
     content = doc->rndr.object_get(0, HOEDOWN_FT_LIST, flags, target, &doc->data);
+    flags |= HOEDOWN_PF_LIST_ITEM;
   }
 
   size_t s, source_start = 0, work_start = 0;
