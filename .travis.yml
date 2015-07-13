@@ -2,9 +2,14 @@ language: c
 compiler:
   - clang
   - gcc
-install:
-  - sudo apt-get -qq install python3
-script: true
+
+addons:
+  apt:
+    packages:
+    - cmake
+    - python3
+sudo: off
 
 # Disabled for now
 #script: cmake . && make test
+script: true
