@@ -30,7 +30,7 @@ libhoedown.so: libhoedown.so.3
 	ln -f -s $^ $@
 
 libhoedown.so.3: $(HOEDOWN_SRC)
-	$(CC) -Wl,-soname,$(@F) -shared $^ $(LDFLAGS) -o $@
+	$(CC) -Wl,-install_name,$(@F) -shared $^ $(LDFLAGS) -o $@
 
 libhoedown.a: $(HOEDOWN_SRC)
 	$(AR) rcs libhoedown.a $^
